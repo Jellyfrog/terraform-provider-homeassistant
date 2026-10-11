@@ -14,6 +14,10 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   device name then plans a change after the upgrade: drop the device name from `name` (`Power`,
   not `Kitchen Lamp Power`) instead of applying it. Entities with an area of their own keep their
   stored name and plan no change.
+- New resource `homeassistant_energy_preferences`: the Energy dashboard's sources and tracked devices,
+  as dynamic `energy_sources`, `device_consumption` and `device_consumption_water`. There is one per
+  instance. Create fails if preferences already exist (import them), and destroy resets them to
+  empty lists (#63).
 - Security: the provider binary is built with Go 1.26.9 (`toolchain` in `go.mod`) instead of
   1.26.0, and `google.golang.org/grpc` (1.83.2), `golang.org/x/net` (0.60.0),
   `golang.org/x/crypto` (0.57.0) and `github.com/moby/go-archive` (0.3.0, tests only) are
