@@ -62,7 +62,7 @@ Which operation uses which transport:
 | Entity / device registry | WS | `config/entity_registry/get|update`, `config/device_registry/list|update` |
 | Helpers (`input_*`, `counter`, `timer`, `schedule`) | WS | `<domain>/list|create|update|delete` (id field `<domain>_id`) |
 | Energy dashboard preferences | WS | `energy/get_prefs`, `energy/save_prefs` |
-| Dashboards | WS | `lovelace/dashboards/list|create|update|delete`, `lovelace/config`, `lovelace/config/save` |
+| Dashboards | WS | `lovelace/dashboards/list|create|update|delete`, `lovelace/config`, `lovelace/config/save|delete` |
 
 ## Inventory
 
@@ -93,6 +93,7 @@ Which operation uses which transport:
 | `homeassistant_input_boolean`, `_number`, `_text`, `_select`, `_datetime`, `_button` | generated | [helpers.md](helpers.md) |
 | `homeassistant_counter`, `homeassistant_timer`, `homeassistant_schedule` | generated | [helpers.md](helpers.md) |
 | `homeassistant_dashboard` | `url_path` | [dashboards.md](dashboards.md) |
+| `homeassistant_default_dashboard` | singleton (`default`) | [dashboards.md](dashboards.md) |
 | `homeassistant_energy_preferences` | constant `energy_preferences` | [energy.md](energy.md) |
 | `homeassistant_integration` | `entry_id` | [integrations.md](integrations.md) |
 | `homeassistant_esphome`, `homeassistant_mqtt` | `entry_id` | [integrations.md](integrations.md) |
