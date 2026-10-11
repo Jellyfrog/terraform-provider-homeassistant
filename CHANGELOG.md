@@ -47,6 +47,10 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
 - `homeassistant_integration`: config flows that show a menu, e.g. the template and group
   helpers. The menu's step answers with `next_step_id`, the chosen option:
   `steps = { user = { next_step_id = "sensor" }, sensor = { ... } }` (#65).
+- New resource `homeassistant_integration_options`: sets the options of a config entry through
+  its options flow, e.g. a threshold's limits or a utility meter's source sensor, for entries made
+  in the UI or by `homeassistant_integration`. Only the fields in `steps` are managed. Import
+  reads the current options, and changes made outside Tofu show up as drift (#64).
 
 ## 1.0.0
 
