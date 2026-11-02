@@ -112,6 +112,14 @@ TF_ACC=1 TF_ACC_TERRAFORM_PATH="$(which tofu)" \
 
 `HOMEASSISTANT_IMAGE_TAG` is optional and defaults to the newest version in the CI matrix.
 
+Each resource also has an upgrade test, `TestAccXxx_upgrade`, built with `acctest.UpgradeTest`.
+It applies the resource's basic configuration with the latest released provider of the current
+major version (`acctest.ReleasedVersion`, e.g. `~> 1.0`), then plans the same configuration with
+the build under test. The plan must be empty, so a change that breaks existing state fails the
+test (see [Stability](#stability)). The released provider is downloaded from the registry, so
+these tests need network access to it. The first release of a new major version updates
+`ReleasedVersion`.
+
 #### Bumping the Home Assistant versions
 
 CI tests the oldest and the newest of the six most recent monthly HA releases
@@ -151,6 +159,9 @@ pick it up from there.
 
 1. Move the `Unreleased` entries in `CHANGELOG.md` under the new version, and merge that.
 2. `git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
+3. After the first release of a new major version, set `ReleasedVersion` in
+   [`internal/acctest/upgrade.go`](internal/acctest/upgrade.go) to it (e.g. `~> 2.0`), so the
+   upgrade tests start from it.
 
 Before the first release, these steps are needed once:
 

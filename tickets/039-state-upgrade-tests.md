@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 depends_on: [003]
 adrs: [0017, 0018]
 spec: []
@@ -29,11 +29,14 @@ discussion of issue #83, whose ticket 038 changes the state of `homeassistant_en
 - No user-visible change, so no `CHANGELOG.md` entry.
 
 ## Acceptance criteria
-- [ ] Every resource has an upgrade test, and all are green against both HA versions in the CI
-      matrix and with OpenTofu 1.8.
-- [ ] A deliberately broken state change (e.g. renaming an attribute locally) makes the test of
+- [x] Every resource has an upgrade test, and all are green against both HA versions in the CI
+      matrix and with OpenTofu 1.8. Two exceptions: `homeassistant_entity_settings` gets its
+      upgrade test from ticket 038 (PR #86), and `homeassistant_esphome` has no acceptance test
+      at all, because it needs a reachable ESPHome device. It shares its implementation
+      (`typedIntegration`) with `homeassistant_mqtt`, which has one.
+- [x] A deliberately broken state change (e.g. renaming an attribute locally) makes the test of
       that resource fail. Check this once by hand; it is not committed.
-- [ ] `go test -short ./...` skips the upgrade tests, like every acceptance test.
+- [x] `go test -short ./...` skips the upgrade tests, like every acceptance test.
 
 ## Notes
 - `~> 1.0` instead of a pinned version: the test then always starts from the state users have
