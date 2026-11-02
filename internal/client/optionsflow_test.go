@@ -105,6 +105,23 @@ func TestOptionsSetKeepsOtherFields(t *testing.T) {
 	}
 }
 
+func TestOptionsSetStepNotShownIsError(t *testing.T) {
+	f := &fakeFlow{
+		t: t, path: optionsPath, init: thresholdForm,
+		replies: []string{`{"type":"create_entry","flow_id":"f1","handler":"E1","result":true}`},
+	}
+
+	err := NewOptionsFlows(serve(t, f.handle)).Set(t.Context(), "E1", map[string]map[string]any{
+		"init": {"upper": json.Number("20")},
+		"int":  {"lower": json.Number("1")},
+	})
+
+	want := `options flow of config entry E1 ended without showing step "int", so its fields were not set; it showed "init"`
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v\nwant  %s", err, want)
+	}
+}
+
 func TestOptionsAnswer(t *testing.T) {
 	for name, tc := range map[string]struct {
 		form  string
@@ -166,6 +183,23 @@ func TestOptionsAnswerUnknownFieldInSection(t *testing.T) {
 	var unknown *FlowUnknownFieldsError
 	if !errors.As(err, &unknown) || !reflect.DeepEqual(unknown.Fields, []string{"advanced.retry"}) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestOptionsAnswerSectionNotAnObject(t *testing.T) {
+	answer := OptionsAnswer(map[string]map[string]any{"init": {"advanced": json.Number("5")}})
+
+	_, err := answer(t.Context(), decodeForm(t, sectionForm))
+
+	want := `step "init" of options flow sets section "advanced" to a value that is not an object of its fields`
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v\nwant  %s", err, want)
+	}
+}
+
+func TestOptionsAnswerSectionNull(t *testing.T) {
+	if err := decodeForm(t, sectionForm).CheckFields(map[string]any{"advanced": nil}); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -148,9 +148,12 @@ UI does when only some fields are edited: every field keeps its current value, a
 the step with the form's `step_id` replace it. A field set to `null` is left out, which unsets an
 optional option. A section is merged field by field. A form whose `step_id` has no step keeps its
 current values. The same `step_id` twice is an error (no loops), and so is a field that the form
-does not have, before anything is submitted. The flow ends with `create_entry`; `abort` is an
-error. Leaving fields out of the answer would not keep them: options flows built on
-`SchemaOptionsFlowHandler` remove optional options that a submit omits.
+does not have, or a section set to anything but an object or `null`, before anything is
+submitted. The flow ends with `create_entry`; `abort` is an error, and so is a step in `steps`
+whose `step_id` the flow never showed (a typo, or a form the flow skips): the options are saved
+by then, but that step's fields were not set. Leaving fields out of the answer would not keep
+them: options flows built on `SchemaOptionsFlowHandler` remove optional options that a submit
+omits.
 
 - **Field-granular:** only the fields in `steps` are managed (like the settings resources,
   ADR-0010). Other options keep their values, whoever set them.

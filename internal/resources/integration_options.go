@@ -71,7 +71,8 @@ func (r *integrationOptionsResource) Schema(_ context.Context, _ resource.Schema
 					"to the form's fields, e.g. `{ init = { upper = 20 } }`. Each form is answered " +
 					"with its current values, and the fields of the step with its `step_id` replace " +
 					"them; `null` unsets an optional field. A field the form does not have is an " +
-					"error. After an import, this holds every field of the first form.",
+					"error, and so is a step the flow never shows. After an import, this holds " +
+					"every field of the first form.",
 				CustomType: dyntype.Type{},
 				Required:   true,
 				Validators: []validator.Dynamic{stepsValidator{}},

@@ -42,15 +42,32 @@ func (f OptionsFlows) Form(ctx context.Context, entryID string) (FlowForm, error
 }
 
 // Set runs the options flow of the config entry. Each form is answered with its current values,
-// overlaid with the fields of the step of the same step_id (OptionsAnswer). Any abort is an error.
+// overlaid with the fields of the step of the same step_id (OptionsAnswer). Any abort is an error,
+// and so is a step whose step_id the flow never showed: its fields were not set.
 func (f OptionsFlows) Set(ctx context.Context, entryID string, steps map[string]map[string]any) error {
 	name := "options flow of config entry " + entryID
-	res, err := f.driver.run(ctx, name, optionsInit(entryID), OptionsAnswer(steps))
+	shown := map[string]bool{}
+	answer := OptionsAnswer(steps)
+	res, err := f.driver.run(ctx, name, optionsInit(entryID), func(ctx context.Context, form FlowForm) (map[string]any, error) {
+		shown[form.StepID] = true
+		return answer(ctx, form)
+	})
 	if err != nil {
 		return err
 	}
 	if res.Type == "abort" {
 		return &FlowAbortedError{Flow: name, Reason: res.Reason}
+	}
+	var notShown []string
+	for id := range steps {
+		if !shown[id] {
+			notShown = append(notShown, id)
+		}
+	}
+	if len(notShown) > 0 {
+		slices.Sort(notShown)
+		return fmt.Errorf("%s ended without showing step %s, so its fields were not set; it showed %s",
+			name, quoteList(notShown), quoteList(slices.Sorted(maps.Keys(shown))))
 	}
 	return nil
 }
@@ -168,12 +185,39 @@ func ReadFields(fields []FormField, set map[string]any) map[string]any {
 	return out
 }
 
-// CheckFields returns a *FlowUnknownFieldsError if set has fields that the form does not have.
+// CheckFields returns a *FlowUnknownFieldsError if set has fields that the form does not have, and
+// an error if it sets a section to something other than an object or null.
 func (f FlowForm) CheckFields(set map[string]any) error {
 	if unknown := unknownFields(f.Fields, set); len(unknown) > 0 {
 		return &FlowUnknownFieldsError{Flow: f.Flow, StepID: f.StepID, Fields: unknown, Known: fieldNames(f.Fields)}
 	}
+	if bad := nonObjectSections(f.Fields, set); len(bad) > 0 {
+		return fmt.Errorf("step %q of %s sets section %s to a value that is not an object of its fields",
+			f.StepID, f.Flow, quoteList(bad))
+	}
 	return nil
+}
+
+// nonObjectSections returns the names in set, sorted, of sections whose value is neither an object
+// nor null, also inside sections, as "section.field".
+func nonObjectSections(fields []FormField, set map[string]any) []string {
+	var bad []string
+	for _, f := range fields {
+		v, ok := set[f.Name]
+		if !ok || v == nil || f.Type != "expandable" {
+			continue
+		}
+		sub, isObject := v.(map[string]any)
+		if !isObject {
+			bad = append(bad, f.Name)
+			continue
+		}
+		for _, b := range nonObjectSections(f.Schema, sub) {
+			bad = append(bad, f.Name+"."+b)
+		}
+	}
+	slices.Sort(bad)
+	return bad
 }
 
 // unknownFields returns the names in set, sorted, that are not fields of the form, also inside
