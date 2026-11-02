@@ -1,7 +1,7 @@
 ---
 status: done
 depends_on: [003]
-adrs: [0017, 0018]
+adrs: [0017, 0018, 0026]
 spec: []
 ---
 
@@ -46,3 +46,6 @@ discussion of issue #83, whose ticket 038 changes the state of `homeassistant_en
   comes from the OpenTofu registry, signed, as users get it.
 - Ticket 038 adds the upgrade test for `homeassistant_entity_settings`. If this ticket is done
   first, 038 uses the helper.
+- Review of PR #87: a breaking change in a new major version gets no exception either. It
+  switches its upgrade test to `acctest.UpgradeTestTo` with the old and the new configuration,
+  which must still plan empty (ADR-0026).

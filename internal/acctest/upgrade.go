@@ -33,12 +33,29 @@ terraform {
 // test configuration.
 //
 // A resource whose state changes on purpose checks the new value in checks. One that cannot plan
-// empty after an upgrade needs a state upgrader or a new major version.
+// empty after an upgrade needs a state upgrader; if its configuration changes too, it uses
+// UpgradeTestTo.
 func UpgradeTest(t *testing.T, config string, checks ...resource.TestCheckFunc) {
 	t.Helper()
-	body, ok := strings.CutPrefix(config, ProviderConfig)
+	UpgradeTestTo(t, config, config, checks...)
+}
+
+// UpgradeTestTo is UpgradeTest for a breaking change that makes users change their configuration
+// (ADR-0026): it applies released with the released provider, then plans current with the build
+// under test. The plan must still be empty, so the state written by the release must work with
+// the new configuration without any change in Home Assistant. Both configurations start with
+// ProviderConfig.
+//
+// After the first release of the new major version, the test goes back to UpgradeTest with the
+// new configuration.
+func UpgradeTestTo(t *testing.T, released, current string, checks ...resource.TestCheckFunc) {
+	t.Helper()
+	body, ok := strings.CutPrefix(released, ProviderConfig)
 	if !ok {
-		t.Fatal("acctest.UpgradeTest: config must start with acctest.ProviderConfig")
+		t.Fatal("acctest.UpgradeTestTo: the released config must start with acctest.ProviderConfig")
+	}
+	if !strings.HasPrefix(current, ProviderConfig) {
+		t.Fatal("acctest.UpgradeTestTo: the current config must start with acctest.ProviderConfig")
 	}
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() { PreCheck(t) },
@@ -54,7 +71,7 @@ func UpgradeTest(t *testing.T, config string, checks ...resource.TestCheckFunc) 
 			},
 			{
 				ProtoV6ProviderFactories: ProtoV6ProviderFactories,
-				Config:                   config,
+				Config:                   current,
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
 				},

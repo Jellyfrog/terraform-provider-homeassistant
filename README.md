@@ -121,6 +121,14 @@ test (see [Stability](#stability)). The released provider is downloaded from the
 these tests need network access to it. The first release of a new major version updates
 `ReleasedVersion`.
 
+A breaking change may make users change their configuration, but never their state or Home
+Assistant ([ADR-0026](adr/0026-breaking-changes-never-break-state.md)). It gets no exception from
+the upgrade test. Instead, its pull request switches the test to
+`acctest.UpgradeTestTo(t, released, current, …)`: `released` is the old configuration, applied
+with the released provider, and `current` is the new one, which must plan empty with the build
+under test. If the state schema changes, the resource needs a state upgrader for that. The pull
+request also tests that the old configuration fails with a diagnostic that says what to change.
+
 #### Bumping the Home Assistant versions
 
 CI tests the oldest and the newest of the six most recent monthly HA releases
@@ -162,7 +170,8 @@ pick it up from there.
 2. `git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
 3. After the first release of a new major version, set `ReleasedVersion` in
    [`internal/acctest/upgrade.go`](internal/acctest/upgrade.go) to it (e.g. `~> 2.0`), so the
-   upgrade tests start from it.
+   upgrade tests start from it, and switch every `acctest.UpgradeTestTo` back to
+   `acctest.UpgradeTest` with its new configuration.
 
 Before the first release, these steps are needed once:
 
