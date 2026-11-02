@@ -377,6 +377,7 @@ resource "homeassistant_input_number" "test" {
 }
 `,
 		resource.TestCheckResourceAttr(addr, "id", "acc_number"),
+		resource.TestCheckResourceAttr(addr, "entity_id", "input_number.acc_number"),
 		resource.TestCheckResourceAttr(addr, "max", "30.5"),
 	)
 }
@@ -394,6 +395,7 @@ resource "homeassistant_input_text" "test" {
 }
 `,
 		resource.TestCheckResourceAttr(addr, "id", "acc_text"),
+		resource.TestCheckResourceAttr(addr, "entity_id", "input_text.acc_text"),
 		resource.TestCheckResourceAttr(addr, "pattern", `^(?=.*[a-z])\w+$`),
 	)
 }
@@ -409,6 +411,7 @@ resource "homeassistant_input_select" "test" {
 }
 `,
 		resource.TestCheckResourceAttr(addr, "id", "acc_select"),
+		resource.TestCheckResourceAttr(addr, "entity_id", "input_select.acc_select"),
 		resource.TestCheckResourceAttr(addr, "options.#", "3"),
 	)
 }
@@ -424,6 +427,7 @@ resource "homeassistant_input_datetime" "test" {
 }
 `,
 		resource.TestCheckResourceAttr(addr, "id", "acc_datetime"),
+		resource.TestCheckResourceAttr(addr, "entity_id", "input_datetime.acc_datetime"),
 		resource.TestCheckResourceAttr(addr, "initial", "2026-12-24 18:30:00"),
 	)
 }
@@ -437,6 +441,7 @@ resource "homeassistant_input_button" "test" {
 }
 `,
 		resource.TestCheckResourceAttr(addr, "id", "acc_button"),
+		resource.TestCheckResourceAttr(addr, "entity_id", "input_button.acc_button"),
 		resource.TestCheckResourceAttr(addr, "icon", "mdi:bell"),
 	)
 }

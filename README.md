@@ -112,8 +112,9 @@ TF_ACC=1 TF_ACC_TERRAFORM_PATH="$(which tofu)" \
 
 `HOMEASSISTANT_IMAGE_TAG` is optional and defaults to the newest version in the CI matrix.
 
-Each resource also has an upgrade test, `TestAccXxx_upgrade`, built with `acctest.UpgradeTest`.
-It applies the resource's basic configuration with the latest released provider of the current
+Each resource except `homeassistant_esphome` (which has no acceptance test, because it needs a
+reachable ESPHome device) also has an upgrade test, `TestAccXxx_upgrade`, built with
+`acctest.UpgradeTest`. It applies the resource's basic configuration with the latest released provider of the current
 major version (`acctest.ReleasedVersion`, e.g. `~> 1.0`), then plans the same configuration with
 the build under test. The plan must be empty, so a change that breaks existing state fails the
 test (see [Stability](#stability)). The released provider is downloaded from the registry, so
