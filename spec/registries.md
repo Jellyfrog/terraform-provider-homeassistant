@@ -133,8 +133,21 @@ The entity is identified by its registry `id`, which a rename does not change:
   `tofu apply -replace=<address>` to manage that other entity instead.
 - **Delete:** resets the other configured fields on the entity's current `entity_id`, and keeps
   that entity ID.
-- A resource in `for_each` keyed by entity ID changes address when it is renamed. The docs show
-  the `moved` block that keeps it.
+- A resource in `for_each` keyed by entity ID changes address when it is renamed. A `moved`
+  block keeps it, and the resource docs show one:
+
+  ```hcl
+  resource "homeassistant_entity_settings" "lights" {
+    for_each  = toset(["light.desk", "light.shelf"]) # was "light.office"
+    entity_id = each.key
+    area_id   = homeassistant_area.office.id
+  }
+
+  moved {
+    from = homeassistant_entity_settings.lights["light.office"]
+    to   = homeassistant_entity_settings.lights["light.desk"]
+  }
+  ```
 
 | Computed | |
 |---|---|

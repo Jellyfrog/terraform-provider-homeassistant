@@ -101,7 +101,10 @@ See [functions.md](functions.md).
 
 ## Conventions
 
-**IDs.** Each resource's import ID is its `id` attribute. Schema descriptions state the format.
+**IDs.** A resource's import ID is its `id` attribute, except for the settings resources:
+`homeassistant_device_settings` is imported by `device_id`, and
+`homeassistant_entity_settings` by `entity_id`, not by its registry `id` (ADR-0025). Schema
+descriptions state the format.
 Generated IDs follow ADR-0009 (collision check, optional `id` via create-then-rename).
 User-chosen IDs follow ADR-0008 (`^[a-z0-9_]+$`, change forces replacement); create fails if
 the ID is taken (ADR-0024).
