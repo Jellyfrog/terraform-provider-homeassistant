@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -217,6 +218,156 @@ resource "homeassistant_entity_settings" "missing" {
 }
 `,
 				ExpectError: regexp.MustCompile(`did\s+not\s+appear\s+in\s+the\s+entity\s+registry\s+within\s+2s`),
+			},
+		},
+	})
+}
+
+// renameEntity renames the entity from to to, as the entity settings dialog does.
+func renameEntity(t *testing.T, from, to string) {
+	t.Helper()
+	_, err := client.Entities(haClient(t).WS).Update(context.Background(), from, map[string]any{"new_entity_id": to})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAccEntitySettings_Rename(t *testing.T) {
+	const addr = "homeassistant_entity_settings.moon"
+	entityID := moonEntity(t)
+	renamed, final := "sensor.acc_moon_renamed", "sensor.acc_moon_final"
+	// An entity that holds an entity ID a rename cannot take.
+	ctx := context.Background()
+	taken, err := inputBooleans(t).Create(ctx, map[string]any{"name": "Acc Taken"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = inputBooleans(t).Delete(ctx, taken.HelperID()) })
+
+	var registryID string
+	settings := `
+  name = "Acc Moon Phase"
+`
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(t) },
+		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
+		// Destroy resets the name on the renamed entity and does not rename it back.
+		CheckDestroy: checkEntityEntry(t, final, func(e client.EntityEntry) error {
+			if e.Name != nil {
+				return fmt.Errorf("name = %s, want it reset", deref(e.Name))
+			}
+			return nil
+		}),
+		Steps: []resource.TestStep{
+			{
+				Config: entitySettingsConfig(entityID, settings),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrWith(addr, "id", func(v string) error {
+						registryID = v
+						if v == "" {
+							return fmt.Errorf("id is empty")
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// Renamed in the UI: the plan renames it back in place.
+				PreConfig: func() { renameEntity(t, entityID, renamed) },
+				Config:    entitySettingsConfig(entityID, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(addr, "entity_id", entityID),
+					checkEntityEntry(t, entityID, func(e client.EntityEntry) error {
+						if e.ID != registryID || deref(e.Name) != "Acc Moon Phase" {
+							return fmt.Errorf("entry = %+v, want id %s renamed back", e, registryID)
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// Renamed in the UI and in config: nothing to do.
+				PreConfig: func() { renameEntity(t, entityID, renamed) },
+				Config:    entitySettingsConfig(renamed, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+			{
+				// Renamed in config: an in-place update keeps the registry ID and the settings.
+				Config: entitySettingsConfig(final, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(addr, "entity_id", final),
+					resource.TestCheckResourceAttrWith(addr, "id", func(v string) error {
+						if v != registryID {
+							return fmt.Errorf("id = %s, want %s", v, registryID)
+						}
+						return nil
+					}),
+					checkEntityEntry(t, final, func(e client.EntityEntry) error {
+						if e.ID != registryID || deref(e.Name) != "Acc Moon Phase" {
+							return fmt.Errorf("entry = %+v", e)
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// Another entity has the entity ID: HA's error, and the hint to replace instead.
+				Config:      entitySettingsConfig("input_boolean.acc_taken", settings),
+				ExpectError: regexp.MustCompile(`(?s)input_boolean\.acc_taken.*tofu\s+apply\s+-replace`),
+			},
+			{
+				// The failed rename left the state alone.
+				Config: entitySettingsConfig(final, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+			{
+				// Import by entity ID fills in the registry ID.
+				ResourceName:                         addr,
+				ImportState:                          true,
+				ImportStateId:                        final,
+				ImportStateVerify:                    true,
+				ImportStateVerifyIdentifierAttribute: "entity_id",
+				ImportStateVerifyIgnore:              []string{"name"},
+			},
+		},
+	})
+}
+
+// State written by v1.0.0, before the registry ID (ADR-0025), plans empty and gets the ID.
+func TestAccEntitySettings_UpgradeFromV1(t *testing.T) {
+	const addr = "homeassistant_entity_settings.moon"
+	entityID := moonEntity(t)
+	settings := `
+  name = "Acc Moon Phase"
+`
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.PreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"homeassistant": {Source: "toelke/homeassistant", VersionConstraint: "1.0.0"},
+				},
+				Config: strings.Replace(entitySettingsConfig(entityID, settings),
+					`source = "toelke/homeassistant"`, `source  = "toelke/homeassistant"
+      version = "1.0.0"`, 1),
+			},
+			{
+				ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
+				Config:                   entitySettingsConfig(entityID, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+				Check: resource.TestCheckResourceAttrSet(addr, "id"),
 			},
 		},
 	})

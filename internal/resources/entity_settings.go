@@ -10,8 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/toelke/terraform-provider-homeassistant/internal/client"
@@ -36,6 +34,7 @@ type entitySettingsResource struct {
 }
 
 type entitySettingsModel struct {
+	ID           types.String   `tfsdk:"id"`
 	EntityID     types.String   `tfsdk:"entity_id"`
 	Name         types.String   `tfsdk:"name"`
 	Icon         types.String   `tfsdk:"icon"`
@@ -60,14 +59,17 @@ func (r *entitySettingsResource) Schema(ctx context.Context, _ resource.SchemaRe
 			"managed; changes made elsewhere to the others cause no diff. Destroying the resource " +
 			"resets the attributes you set to Home Assistant's defaults and leaves the entity in " +
 			"place. Values from before Tofu managed the entity are not restored. Only entities with " +
-			"a unique ID are in the entity registry and can be managed. Import with the entity ID; " +
-			"the first plan after an import sets the configured attributes.",
+			"a unique ID are in the entity registry and can be managed. The resource follows the " +
+			"entity's registry ID, so a rename in the UI shows as a change of `entity_id`. Import " +
+			"with the entity ID; the first plan after an import sets the configured attributes.",
 		Attributes: map[string]schema.Attribute{
+			"id": computedString("Registry ID of the entity. A rename does not change it."),
 			"entity_id": schema.StringAttribute{
-				Description: "Entity ID, e.g. `light.bedroom_ceiling`. Changing it replaces the " +
-					"resource. Create waits for the entity to appear in the registry.",
-				Required:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				Description: "Entity ID, e.g. `light.bedroom_ceiling`. Create waits for the " +
+					"entity to appear in the registry. Changing it afterwards renames the entity; " +
+					"destroying the resource does not rename it back. To manage another entity " +
+					"instead, replace the resource with `tofu apply -replace`.",
+				Required: true,
 			},
 			"name": schema.StringAttribute{
 				Description: "Name that overrides the integration's. Unsetting it goes back to " +
@@ -180,6 +182,7 @@ func (m *entitySettingsModel) refresh(ctx context.Context, e client.EntityEntry)
 
 // computedFrom sets m's computed attributes from e and leaves the settable ones alone.
 func (m *entitySettingsModel) computedFrom(e client.EntityEntry) {
+	m.ID = types.StringValue(e.ID)
 	m.Platform = types.StringValue(e.Platform)
 	m.DeviceID = types.StringPointerValue(e.DeviceID)
 	m.OriginalName = types.StringPointerValue(e.OriginalName)
@@ -236,7 +239,7 @@ func (r *entitySettingsResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	entry, ok, err := r.entities.Get(ctx, state.EntityID.ValueString())
+	entry, ok, err := r.find(ctx, state)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading entity settings", client.ErrorDetail(err))
 		return
@@ -250,6 +253,15 @@ func (r *entitySettingsResource) Read(ctx context.Context, req resource.ReadRequ
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
+// find returns the registry entry of m: the one with m's ID, or, for state written before
+// ADR-0025 without an ID, the one with m's entity ID. ok is false if there is none.
+func (r *entitySettingsResource) find(ctx context.Context, m entitySettingsModel) (client.EntityEntry, bool, error) {
+	if m.ID.ValueString() == "" {
+		return r.entities.Get(ctx, m.EntityID.ValueString())
+	}
+	return r.entities.Find(ctx, m.ID.ValueString(), m.EntityID.ValueString())
+}
+
 func (r *entitySettingsResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state entitySettingsModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -257,7 +269,8 @@ func (r *entitySettingsResource) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	entityID := plan.EntityID.ValueString()
+	// Read refreshed the entity ID in state, so it is the entity's current one.
+	entityID := state.EntityID.ValueString()
 	from := state
 	if plan.needsRegistryFlags(state) {
 		entry, ok, err := r.entities.Get(ctx, entityID)
@@ -276,10 +289,24 @@ func (r *entitySettingsResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
+	newEntityID := plan.EntityID.ValueString()
+	if newEntityID != entityID {
+		fields["new_entity_id"] = newEntityID
+	}
+
 	if len(fields) > 0 {
 		entry, err := r.entities.Update(ctx, entityID, fields)
 		if err != nil {
-			resp.Diagnostics.AddError("Updating entity settings", client.ErrorDetail(err))
+			detail := client.ErrorDetail(err)
+			if newEntityID != entityID {
+				detail += fmt.Sprintf("\n\nChanging `entity_id` renames %s to %s. If %s is another "+
+					"entity that this resource should manage instead, replace the resource: "+
+					"`tofu apply -replace=<address>`.", entityID, newEntityID, newEntityID)
+			}
+			resp.Diagnostics.AddError("Updating entity settings", detail)
+			// The update is a single command, so nothing changed: keep the prior state rather
+			// than the plan.
+			resp.State.Raw = req.State.Raw
 			return
 		}
 		plan.computedFrom(entry)
@@ -299,6 +326,7 @@ func (r *entitySettingsResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
+	// The entity keeps its entity ID: other configuration may refer to it (ADR-0025).
 	entityID := state.EntityID.ValueString()
 	_, err := r.entities.Update(ctx, entityID, fields)
 	// An entity that is gone has nothing left to reset.

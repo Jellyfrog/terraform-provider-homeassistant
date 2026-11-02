@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"slices"
 )
 
 // EntityEntry is an entry of the entity registry.
 type EntityEntry struct {
+	// ID is the registry ID. Unlike the entity ID, a rename does not change it (ADR-0025).
+	ID           string   `json:"id"`
 	EntityID     string   `json:"entity_id"`
 	Name         *string  `json:"name"`
 	Icon         *string  `json:"icon"`
@@ -31,7 +34,7 @@ func Entities(ws WSCommander) EntityRegistry {
 	return EntityRegistry{ws: ws}
 }
 
-// List returns every entry. Only the acceptance tests use it.
+// List returns every entry.
 func (r EntityRegistry) List(ctx context.Context) ([]EntityEntry, error) {
 	var entries []EntityEntry
 	err := r.ws.Command(ctx, "config/entity_registry/list", nil, &entries)
@@ -48,7 +51,26 @@ func (r EntityRegistry) Get(ctx context.Context, entityID string) (entry EntityE
 	return entry, err == nil, err
 }
 
-// Update sets fields on the entry of entityID and returns the result.
+// Find returns the entry with the registry ID id, whose entity ID was entityID when last seen.
+// It tries `get` by entityID first and lists the whole registry only if that misses or finds
+// another entry, which happens after a rename (ADR-0025). ok is false if no entry has id.
+func (r EntityRegistry) Find(ctx context.Context, id, entityID string) (entry EntityEntry, ok bool, err error) {
+	entry, ok, err = r.Get(ctx, entityID)
+	if err != nil || (ok && entry.ID == id) {
+		return entry, ok, err
+	}
+	entries, err := r.List(ctx)
+	if err != nil {
+		return EntityEntry{}, false, err
+	}
+	if i := slices.IndexFunc(entries, func(e EntityEntry) bool { return e.ID == id }); i >= 0 {
+		return entries[i], true, nil
+	}
+	return EntityEntry{}, false, nil
+}
+
+// Update sets fields on the entry of entityID and returns the result. A `new_entity_id` field
+// renames the entity.
 func (r EntityRegistry) Update(ctx context.Context, entityID string, fields map[string]any) (EntityEntry, error) {
 	params := make(map[string]any, len(fields)+1)
 	maps.Copy(params, fields)
