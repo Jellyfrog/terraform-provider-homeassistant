@@ -84,7 +84,7 @@ Which operation uses which transport:
 | `homeassistant_floor` | generated | [registries.md](registries.md) |
 | `homeassistant_area` | generated | [registries.md](registries.md) |
 | `homeassistant_label` | generated | [registries.md](registries.md) |
-| `homeassistant_entity_settings` | `entity_id` | [registries.md](registries.md) |
+| `homeassistant_entity_settings` | registry `id` (ADR-0025) | [registries.md](registries.md) |
 | `homeassistant_device_settings` | `device_id` | [registries.md](registries.md) |
 | `homeassistant_automation` | user-chosen | [automations.md](automations.md) |
 | `homeassistant_script` | user-chosen | [automations.md](automations.md) |
