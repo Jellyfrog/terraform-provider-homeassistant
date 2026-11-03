@@ -41,24 +41,25 @@ type deviceModel struct {
 // pairType is the type of `identifiers` and `connections`: a list of [domain or type, value] pairs.
 var pairType = types.ListType{ElemType: types.StringType}
 
+// stringList converts strings to a list(string), empty rather than null.
+func stringList[S ~string](ss []S) types.List {
+	elems := make([]attr.Value, len(ss))
+	for i, s := range ss {
+		elems[i] = types.StringValue(string(s))
+	}
+	return types.ListValueMust(types.StringType, elems)
+}
+
 // pairList converts registry pairs to a list(list(string)), empty rather than null.
 func pairList(rows [][]client.RegistryString) types.List {
-	elems := make([]attr.Value, 0, len(rows))
-	for _, row := range client.StringRows(rows) {
-		items := make([]attr.Value, len(row))
-		for i, v := range row {
-			items[i] = types.StringValue(v)
-		}
-		elems = append(elems, types.ListValueMust(types.StringType, items))
+	elems := make([]attr.Value, len(rows))
+	for i, row := range rows {
+		elems[i] = stringList(row)
 	}
 	return types.ListValueMust(pairType, elems)
 }
 
 func newDeviceModel(d client.Device) deviceModel {
-	entries := make([]attr.Value, len(d.ConfigEntries))
-	for i, e := range d.ConfigEntries {
-		entries[i] = types.StringValue(e)
-	}
 	return deviceModel{
 		DeviceID:      types.StringValue(d.ID),
 		Name:          types.StringPointerValue(d.Name),
@@ -68,7 +69,7 @@ func newDeviceModel(d client.Device) deviceModel {
 		SWVersion:     types.StringPointerValue(d.SWVersion.StringPointer()),
 		AreaID:        types.StringPointerValue(d.AreaID),
 		Labels:        stringSet(d.Labels),
-		ConfigEntries: types.ListValueMust(types.StringType, entries),
+		ConfigEntries: stringList(d.ConfigEntries),
 		Identifiers:   pairList(d.Identifiers),
 		Connections:   pairList(d.Connections),
 	}
@@ -278,7 +279,7 @@ type deviceDataSource struct {
 // deviceLookupModel is `homeassistant_device`: a device, and the identifier it was looked up by.
 type deviceLookupModel struct {
 	deviceModel
-	Identifier types.List `tfsdk:"identifier"`
+	Identifier []string `tfsdk:"identifier"`
 }
 
 func (d *deviceDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -306,7 +307,7 @@ func (d *deviceDataSource) Schema(_ context.Context, _ datasource.SchemaRequest,
 			"device is renamed. Set exactly one of `device_id`, `name` and `identifier`.",
 		ElementType: types.StringType,
 		Optional:    true,
-		Validators:  []validator.List{listvalidator.SizeAtLeast(2), listvalidator.SizeAtMost(2)},
+		Validators:  []validator.List{listvalidator.SizeBetween(2, 2)},
 	}
 	resp.Schema = schema.Schema{
 		Description: "Reads one device (`config/device_registry/list`), by ID, by name, or by " +
@@ -331,19 +332,12 @@ func (d *deviceDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	var identifier []string
-	if !cfg.Identifier.IsNull() {
-		resp.Diagnostics.Append(cfg.Identifier.ElementsAs(ctx, &identifier, false)...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-	}
 	devices, err := d.devices.List(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading devices", client.ErrorDetail(err))
 		return
 	}
-	device, err := matchDevice(devices, cfg.DeviceID.ValueStringPointer(), cfg.Name.ValueStringPointer(), identifier)
+	device, err := matchDevice(devices, cfg.DeviceID.ValueStringPointer(), cfg.Name.ValueStringPointer(), cfg.Identifier)
 	if err != nil {
 		resp.Diagnostics.AddError("Finding the device", err.Error())
 		return
@@ -365,10 +359,12 @@ func matchDevice(devices []client.Device, id, name *string, identifier []string)
 	switch {
 	case identifier != nil:
 		what = fmt.Sprintf("identifier %q", identifier)
+		want := make([]client.RegistryString, len(identifier))
+		for i, s := range identifier {
+			want[i] = client.RegistryString(s)
+		}
 		for _, d := range devices {
-			if slices.ContainsFunc(client.StringRows(d.Identifiers), func(row []string) bool {
-				return slices.Equal(row, identifier)
-			}) {
+			if slices.ContainsFunc(d.Identifiers, func(row []client.RegistryString) bool { return slices.Equal(row, want) }) {
 				matches = append(matches, d)
 			}
 		}
