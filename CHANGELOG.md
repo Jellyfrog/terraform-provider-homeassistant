@@ -24,6 +24,10 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   and a timer's `duration` must be written the way Home Assistant stores them (`07:00:00`,
   `0:05:00`). A time range's custom `data` is an optional JSON string (`data = jsonencode({ price = 0.12 })`),
   compared by value, so key order and number spelling never show as a diff.
+- New resource `homeassistant_lovelace_resource`: a Lovelace resource (`url`, `type`), e.g. the
+  JavaScript of a custom card that a dashboard uses. Import by ID or URL (#91).
+- Supports Home Assistant 2026.5 to 2026.10, the six most recent releases (ADR-0003). CI tests
+  2026.5.4 and 2026.10.0.
 - Security: the provider binary is built with Go 1.26.9 (`toolchain` in `go.mod`) instead of
   1.26.0, and `google.golang.org/grpc` (1.83.2), `golang.org/x/net` (0.60.0),
   `golang.org/x/crypto` (0.57.0) and `github.com/moby/go-archive` (0.3.0, tests only) are
