@@ -194,7 +194,11 @@ its entities too.
   `integration` (resolved through the domain of the config entries from `config_entries/get`; an
   unknown domain matches nothing), `manufacturer`, `model`, `area_id`, `label` (a label ID).
   `devices` is a list of objects with `device_id`, `name`, `name_by_user`, `manufacturer`,
-  `model`, `sw_version`, `area_id`, `labels`, `config_entries`, sorted by `device_id`.
-- `homeassistant_device` — matched by exactly one of `device_id` or `name`, which is compared with
-  `name_by_user` first, then, only if no device matches that way, with `name`. Ambiguous matches
-  are an error. A configured `name` stays as given in state, even if it matched `name_by_user`.
+  `model`, `sw_version`, `area_id`, `labels`, `config_entries`, `identifiers` and `connections`
+  (each list(list(string)), `[domain or type, value]` pairs, empty rather than null), sorted by
+  `device_id`.
+- `homeassistant_device` — matched by exactly one of `device_id`, `name` or `identifier`. `name`
+  is compared with `name_by_user` first, then, only if no device matches that way, with `name`.
+  `identifier` (list(string) of two elements) matches the devices whose `identifiers` contain
+  that exact pair; it stays stable when a device is renamed. Ambiguous matches are an error. A
+  configured `name` stays as given in state, even if it matched `name_by_user`.

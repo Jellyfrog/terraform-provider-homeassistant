@@ -15,6 +15,7 @@ type Device struct {
 	Labels        []string           `json:"labels"`
 	DisabledBy    *string            `json:"disabled_by"`
 	Identifiers   [][]RegistryString `json:"identifiers"`
+	Connections   [][]RegistryString `json:"connections"`
 	ConfigEntries []string           `json:"config_entries"`
 }
 

@@ -4,12 +4,13 @@ package datasources
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/toelke/terraform-provider-homeassistant/internal/client"
 )
@@ -40,21 +41,26 @@ func haClient(req datasource.ConfigureRequest, resp *datasource.ConfigureRespons
 	return c
 }
 
-// exactlyOneOf checks that exactly one of the string attributes a and b is set. An unknown value
-// counts as set, as it will be once known.
-func exactlyOneOf(ctx context.Context, config tfsdk.Config, a, b string) diag.Diagnostics {
+// exactlyOneOf checks that exactly one of the named attributes is set. An unknown value counts as
+// set, as it will be once known.
+func exactlyOneOf(ctx context.Context, config tfsdk.Config, names ...string) diag.Diagnostics {
 	var diags diag.Diagnostics
 	set := 0
-	for _, name := range []string{a, b} {
-		var v types.String
+	for _, name := range names {
+		var v attr.Value
 		diags.Append(config.GetAttribute(ctx, path.Root(name), &v)...)
-		if !v.IsNull() {
+		if v != nil && !v.IsNull() {
 			set++
 		}
 	}
 	if !diags.HasError() && set != 1 {
-		diags.AddAttributeError(path.Root(a), "Invalid attribute combination",
-			fmt.Sprintf("Set exactly one of `%s` and `%s`.", a, b))
+		quoted := make([]string, len(names))
+		for i, n := range names {
+			quoted[i] = "`" + n + "`"
+		}
+		list := strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
+		diags.AddAttributeError(path.Root(names[0]), "Invalid attribute combination",
+			fmt.Sprintf("Set exactly one of %s.", list))
 	}
 	return diags
 }

@@ -7,9 +7,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/toelke/terraform-provider-homeassistant/internal/client"
@@ -32,6 +34,24 @@ type deviceModel struct {
 	AreaID        types.String `tfsdk:"area_id"`
 	Labels        types.Set    `tfsdk:"labels"`
 	ConfigEntries types.List   `tfsdk:"config_entries"`
+	Identifiers   types.List   `tfsdk:"identifiers"`
+	Connections   types.List   `tfsdk:"connections"`
+}
+
+// pairType is the type of `identifiers` and `connections`: a list of [domain or type, value] pairs.
+var pairType = types.ListType{ElemType: types.StringType}
+
+// pairList converts registry pairs to a list(list(string)), empty rather than null.
+func pairList(rows [][]client.RegistryString) types.List {
+	elems := make([]attr.Value, 0, len(rows))
+	for _, row := range client.StringRows(rows) {
+		items := make([]attr.Value, len(row))
+		for i, v := range row {
+			items[i] = types.StringValue(v)
+		}
+		elems = append(elems, types.ListValueMust(types.StringType, items))
+	}
+	return types.ListValueMust(pairType, elems)
 }
 
 func newDeviceModel(d client.Device) deviceModel {
@@ -49,6 +69,8 @@ func newDeviceModel(d client.Device) deviceModel {
 		AreaID:        types.StringPointerValue(d.AreaID),
 		Labels:        stringSet(d.Labels),
 		ConfigEntries: types.ListValueMust(types.StringType, entries),
+		Identifiers:   pairList(d.Identifiers),
+		Connections:   pairList(d.Connections),
 	}
 }
 
@@ -61,6 +83,10 @@ var deviceFields = map[string]string{
 	"area_id":        "ID of the device's area; null if it is in none.",
 	"labels":         "IDs of the device's labels.",
 	"config_entries": "IDs of the config entries the device belongs to.",
+	"identifiers": "Identifiers of the device, each a list such as `[\"mqtt\", \"zigbee2mqtt_0x00158d0004aaf230\"]`: " +
+		"the integration's domain, then its ID. They stay the same when the device is renamed.",
+	"connections": "Connections of the device, each a list such as `[\"mac\", \"dc:a6:32:54:1f:88\"]`: the " +
+		"connection type, then its value.",
 }
 
 // computedDeviceAttributes returns the schema of deviceFields, all computed.
@@ -72,6 +98,8 @@ func computedDeviceAttributes() map[string]schema.Attribute {
 			attrs[name] = schema.SetAttribute{Description: desc, ElementType: types.StringType, Computed: true}
 		case "config_entries":
 			attrs[name] = schema.ListAttribute{Description: desc, ElementType: types.StringType, Computed: true}
+		case "identifiers", "connections":
+			attrs[name] = schema.ListAttribute{Description: desc, ElementType: pairType, Computed: true}
 		default:
 			attrs[name] = schema.StringAttribute{Description: desc, Computed: true}
 		}
@@ -247,6 +275,12 @@ type deviceDataSource struct {
 	devices *client.Registry[client.Device]
 }
 
+// deviceLookupModel is `homeassistant_device`: a device, and the identifier it was looked up by.
+type deviceLookupModel struct {
+	deviceModel
+	Identifier types.List `tfsdk:"identifier"`
+}
+
 func (d *deviceDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_device"
 }
@@ -254,27 +288,35 @@ func (d *deviceDataSource) Metadata(_ context.Context, req datasource.MetadataRe
 func (d *deviceDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	attrs := computedDeviceAttributes()
 	attrs["device_id"] = schema.StringAttribute{
-		Description: "Device ID to look up. Set exactly one of `device_id` and `name`.",
+		Description: "Device ID to look up. Set exactly one of `device_id`, `name` and `identifier`.",
 		Optional:    true,
 		Computed:    true,
 	}
 	attrs["name"] = schema.StringAttribute{
 		Description: "Name to look up. It is compared with `name_by_user` first; only if no device " +
 			"has that `name_by_user` is it compared with the name the integration gave. Set exactly " +
-			"one of `device_id` and `name`. When the device is looked up by `device_id`, this is the " +
-			"name the integration gave, or null if it gave none.",
+			"one of `device_id`, `name` and `identifier`. When the device is looked up otherwise, this " +
+			"is the name the integration gave, or null if it gave none.",
 		Optional: true,
 		Computed: true,
 	}
+	attrs["identifier"] = schema.ListAttribute{
+		Description: "Identifier to look up, e.g. `[\"mqtt\", \"zigbee2mqtt_0x00158d0004aaf230\"]`: the device " +
+			"whose `identifiers` contain it, compared exactly. Unlike `name`, it does not change when the " +
+			"device is renamed. Set exactly one of `device_id`, `name` and `identifier`.",
+		ElementType: types.StringType,
+		Optional:    true,
+		Validators:  []validator.List{listvalidator.SizeAtLeast(2), listvalidator.SizeAtMost(2)},
+	}
 	resp.Schema = schema.Schema{
-		Description: "Reads one device (`config/device_registry/list`), by ID or by name. Exactly " +
-			"one device must match.",
+		Description: "Reads one device (`config/device_registry/list`), by ID, by name, or by " +
+			"identifier. Exactly one device must match.",
 		Attributes: attrs,
 	}
 }
 
 func (d *deviceDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
-	resp.Diagnostics.Append(exactlyOneOf(ctx, req.Config, "device_id", "name")...)
+	resp.Diagnostics.Append(exactlyOneOf(ctx, req.Config, "device_id", "name", "identifier")...)
 }
 
 func (d *deviceDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -284,22 +326,29 @@ func (d *deviceDataSource) Configure(_ context.Context, req datasource.Configure
 }
 
 func (d *deviceDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var cfg deviceModel
+	var cfg deviceLookupModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	var identifier []string
+	if !cfg.Identifier.IsNull() {
+		resp.Diagnostics.Append(cfg.Identifier.ElementsAs(ctx, &identifier, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 	devices, err := d.devices.List(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Reading devices", client.ErrorDetail(err))
 		return
 	}
-	device, err := matchDevice(devices, cfg.DeviceID.ValueStringPointer(), cfg.Name.ValueStringPointer())
+	device, err := matchDevice(devices, cfg.DeviceID.ValueStringPointer(), cfg.Name.ValueStringPointer(), identifier)
 	if err != nil {
 		resp.Diagnostics.AddError("Finding the device", err.Error())
 		return
 	}
-	state := newDeviceModel(device)
+	state := deviceLookupModel{deviceModel: newDeviceModel(device), Identifier: cfg.Identifier}
 	if !cfg.Name.IsNull() {
 		// The configured value must stay, even if it matched name_by_user.
 		state.Name = cfg.Name
@@ -307,19 +356,30 @@ func (d *deviceDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-// matchDevice returns the one device with the given ID or, if id is nil, the given name: the
-// devices whose name_by_user is name, or else those whose name is.
-func matchDevice(devices []client.Device, id, name *string) (client.Device, error) {
+// matchDevice returns the one device with the given ID, the given identifier (a [domain, id]
+// pair in its identifiers), or the given name: the devices whose name_by_user is name, or else
+// those whose name is. Exactly one of id, name and identifier is set.
+func matchDevice(devices []client.Device, id, name *string, identifier []string) (client.Device, error) {
 	var matches []client.Device
 	var what string
-	if id != nil {
+	switch {
+	case identifier != nil:
+		what = fmt.Sprintf("identifier %q", identifier)
+		for _, d := range devices {
+			if slices.ContainsFunc(client.StringRows(d.Identifiers), func(row []string) bool {
+				return slices.Equal(row, identifier)
+			}) {
+				matches = append(matches, d)
+			}
+		}
+	case id != nil:
 		what = fmt.Sprintf("ID %q", *id)
 		for _, d := range devices {
 			if d.ID == *id {
 				matches = append(matches, d)
 			}
 		}
-	} else {
+	default:
 		what = fmt.Sprintf("name %q", *name)
 		for _, field := range []func(client.Device) *string{
 			func(d client.Device) *string { return d.NameByUser },

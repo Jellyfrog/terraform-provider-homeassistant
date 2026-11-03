@@ -11,7 +11,11 @@ import (
 func str(s string) *string { return &s }
 
 var testDevices = []client.Device{
-	{ID: "d3", Name: str("Moon"), ConfigEntries: []string{"E-moon"}},
+	{
+		ID: "d3", Name: str("Moon"), ConfigEntries: []string{"E-moon"},
+		Identifiers: [][]client.RegistryString{{"mqtt", "zigbee2mqtt_0x00158d0004aaf230"}, {"moon", "7"}},
+		Connections: [][]client.RegistryString{{"mac", "dc:a6:32:54:1f:88"}},
+	},
 	{
 		ID: "d1", Name: str("Bulb"), NameByUser: str("Desk Lamp"), Manufacturer: str("Signify"),
 		Model: str("LCA001"), AreaID: str("office"), Labels: []string{"managed"},
@@ -21,7 +25,7 @@ var testDevices = []client.Device{
 		ID: "d2", Name: str("Bulb"), Manufacturer: str("Signify"), Model: str("LCA002"),
 		Labels: []string{"managed", "night"}, ConfigEntries: []string{"E-other", "E-hue"},
 	},
-	{ID: "d4", Name: str("Desk Lamp"), Manufacturer: str("IKEA")},
+	{ID: "d4", Name: str("Desk Lamp"), Manufacturer: str("IKEA"), Identifiers: [][]client.RegistryString{{"moon", "7"}}},
 }
 
 func TestDeviceFilter(t *testing.T) {
@@ -57,10 +61,15 @@ func TestDeviceFilter(t *testing.T) {
 
 func TestMatchDevice(t *testing.T) {
 	cases := map[string]struct {
-		id, name *string
-		wantID   string
-		wantErr  string
+		id, name   *string
+		identifier []string
+		wantID     string
+		wantErr    string
 	}{
+		"by identifier":         {identifier: []string{"mqtt", "zigbee2mqtt_0x00158d0004aaf230"}, wantID: "d3"},
+		"identifier exactly":    {identifier: []string{"mqtt", "zigbee2mqtt_0x00158D0004AAF230"}, wantErr: `no device has identifier`},
+		"identifier pair":       {identifier: []string{"zigbee2mqtt_0x00158d0004aaf230", "mqtt"}, wantErr: `no device has identifier`},
+		"ambiguous identifier":  {identifier: []string{"moon", "7"}, wantErr: `2 devices have identifier ["moon" "7"]: d3, d4;`},
 		"by ID":                 {id: str("d2"), wantID: "d2"},
 		"unknown ID":            {id: str("d9"), wantErr: `no device has ID "d9"`},
 		"name_by_user wins":     {name: str("Desk Lamp"), wantID: "d1"},
@@ -71,7 +80,7 @@ func TestMatchDevice(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got, err := matchDevice(testDevices, tc.id, tc.name)
+			got, err := matchDevice(testDevices, tc.id, tc.name, tc.identifier)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want %q", err, tc.wantErr)
@@ -82,5 +91,20 @@ func TestMatchDevice(t *testing.T) {
 				t.Errorf("matchDevice = %+v, %v; want %s", got, err, tc.wantID)
 			}
 		})
+	}
+}
+
+func TestNewDeviceModelPairs(t *testing.T) {
+	m := newDeviceModel(testDevices[0])
+	if got := m.Identifiers.String(); got != `[["mqtt","zigbee2mqtt_0x00158d0004aaf230"],["moon","7"]]` {
+		t.Errorf("identifiers = %s", got)
+	}
+	if got := m.Connections.String(); got != `[["mac","dc:a6:32:54:1f:88"]]` {
+		t.Errorf("connections = %s", got)
+	}
+	// A device without them gets empty lists, not null.
+	m = newDeviceModel(testDevices[1])
+	if m.Identifiers.IsNull() || len(m.Identifiers.Elements()) != 0 || m.Connections.IsNull() || len(m.Connections.Elements()) != 0 {
+		t.Errorf("identifiers = %s, connections = %s; want empty lists", m.Identifiers, m.Connections)
 	}
 }
