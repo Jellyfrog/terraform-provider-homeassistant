@@ -6,6 +6,8 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
 
 ## Unreleased
 
+- New resource `homeassistant_lovelace_resource`: a Lovelace resource (`url`, `type`), e.g. the
+  JavaScript of a custom card that a dashboard uses. Import by ID or URL (#91).
 - Supports Home Assistant 2026.5 to 2026.10, the six most recent releases (ADR-0003). CI tests
   2026.5.4 and 2026.10.0.
 - Security: the provider binary is built with Go 1.26.9 (`toolchain` in `go.mod`) instead of

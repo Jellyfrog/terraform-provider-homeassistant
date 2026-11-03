@@ -100,3 +100,26 @@ locals {
 ```
 
 Card builder functions ([functions.md](functions.md)) build the same objects with less typing.
+
+## `homeassistant_lovelace_resource`
+
+A Lovelace resource: a URL the frontend loads on every dashboard, such as a custom card's
+JavaScript. Only while Lovelace keeps its resources in storage (the default); in YAML mode the
+commands don't exist and every call fails.
+
+| Argument | Type | Notes |
+|---|---|---|
+| `url` | string, required | in-place update |
+| `type` | string, required: `module`, `js` or `css` | in-place update; sent as `res_type` |
+
+| Computed | Notes |
+|---|---|
+| `id` | HA's random resource ID |
+
+| Operation | Command |
+|---|---|
+| Create | `lovelace/resources` (fails if a resource has the same `url`, since HA would load it twice; the error names its ID for import) → `lovelace/resources/create` (`res_type`, `url`) |
+| Read | `lovelace/resources` (find by `id`; missing → remove from state) |
+| Update | `lovelace/resources` (fails if another resource has the new `url`, as for Create) → `lovelace/resources/update` (`resource_id`, `res_type`, `url`) |
+| Delete | `lovelace/resources/delete` (`resource_id`; a resource that is gone counts as deleted) |
+| Import | by `id` or by `url`; a `url` that several resources share is an error (import by `id`) |

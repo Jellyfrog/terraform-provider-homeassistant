@@ -79,6 +79,9 @@ ADR-0012.
 
 **Lovelace** — HA's dashboard system. Its WebSocket commands are prefixed `lovelace/`.
 
+**Lovelace resource** — A URL that the frontend loads on every dashboard, such as the
+JavaScript of a custom card. Has an `id`, a `url` and a `type` (`module`, `js`, `css`).
+
 **Dashboard** — A Lovelace dashboard. It has *metadata* (`url_path`, title, icon, sidebar
 visibility) and a *config* (views → sections → cards).
 
