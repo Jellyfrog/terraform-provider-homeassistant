@@ -46,7 +46,9 @@ Read-Only:
 
 - `area_id` (String) ID of the device's area; null if it is in none.
 - `config_entries` (List of String) IDs of the config entries the device belongs to.
+- `connections` (List of List of String) Connections of the device, each a list such as `["mac", "dc:a6:32:54:1f:88"]`: the connection type, then its value.
 - `device_id` (String) Device ID.
+- `identifiers` (List of List of String) Identifiers of the device, each a list such as `["mqtt", "zigbee2mqtt_0x00158d0004aaf230"]`: the integration's domain, then its ID. They stay the same when the device is renamed.
 - `labels` (Set of String) IDs of the device's labels.
 - `manufacturer` (String) Manufacturer; null if the integration reports none.
 - `model` (String) Model; null if the integration reports none.

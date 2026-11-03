@@ -87,6 +87,10 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   domain, which 1.0.0 also replaced: Home Assistant doesn't rename across domains, so the apply
   fails with its error and the hint. A change to an entity ID that no entity has used to time
   out. Now it renames the entity.
+- `homeassistant_devices` and `homeassistant_device` expose `identifiers` and `connections`, and
+  `homeassistant_device` can look a device up by `identifier` (e.g.
+  `["mqtt", "zigbee2mqtt_0x00158d0004aaf230"]`), which does not change when the device is renamed
+  (#88).
 
 ## 1.0.0
 
