@@ -114,6 +114,13 @@ resource "homeassistant_entity_settings" "ceiling" {
 | `hidden` | bool → `hidden_by: "user"`, or `null` if it was `"user"` | `null` if `true` |
 | `disabled` | bool → `disabled_by: "user"`, or `null` if it was `"user"` | `null` if `true` |
 
+Since HA 2026.11, HA shows the device name in front of a `name` set here, as it always did for
+the integration's name. Upgrading HA to 2026.11 strips the device name from the front of stored
+names when the entity has no area of its own (entity registry 1.24), so a config with
+`name = "Kitchen Lamp Power"` on the device "Kitchen Lamp" then plans a change from `"Power"`.
+The provider passes `name` through unchanged and does not rewrite it; the config has to drop the
+device name.
+
 `hidden_by` and `disabled_by` can also be set by integrations, devices, or config entries. The
 provider maps the read-back value `"user"` to `true` and anything else to `false`, so `false`
 means "not hidden or disabled by the user". It writes `"user"` for `true`, and writes `null` only

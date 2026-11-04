@@ -82,8 +82,8 @@ only in a new major version, and each one is listed under **Breaking** in
 [`CHANGELOG.md`](CHANGELOG.md). Pin the major version (`version = "~> 1.0"`) and read the
 changelog before you move to a new one.
 
-The provider supports the six most recent monthly Home Assistant releases, currently 2026.5 to
-2026.10 ([ADR-0003](adr/0003-home-assistant-support-window.md)). It does not check the version.
+The provider supports the six most recent monthly Home Assistant releases, currently 2026.6 to
+2026.11 ([ADR-0003](adr/0003-home-assistant-support-window.md)). It does not check the version.
 Against an older Home Assistant, some configs may fail with Home Assistant's own validation errors.
 
 ## Development
@@ -106,7 +106,7 @@ are skipped without `TF_ACC`:
 ```sh
 TF_ACC=1 TF_ACC_TERRAFORM_PATH="$(which tofu)" \
   TF_ACC_PROVIDER_NAMESPACE=toelke TF_ACC_PROVIDER_HOST=registry.opentofu.org \
-  HOMEASSISTANT_IMAGE_TAG=2026.10.0 \
+  HOMEASSISTANT_IMAGE_TAG=2026.11.0 \
   go test -run '^TestAcc' ./...
 ```
 
@@ -136,7 +136,7 @@ CI tests the oldest and the newest of the six most recent monthly HA releases
 
 1. In [`.github/workflows/acceptance.yml`](.github/workflows/acceptance.yml), set the `ha` matrix
    to the latest patch release of the newest month and of the month five releases before it,
-   e.g. `2026.5.4` and `2026.10.0`, and set the `ha` of the OpenTofu 1.8 cell under `include` to
+   e.g. `2026.6.4` and `2026.11.0`, and set the `ha` of the OpenTofu 1.8 cell under `include` to
    the oldest one. Tags are listed at <https://github.com/home-assistant/core/releases>. Update
    the window named under [Stability](#stability) too.
 2. Set `DefaultImageTag` in [`internal/acctest/acctest.go`](internal/acctest/acctest.go) to the

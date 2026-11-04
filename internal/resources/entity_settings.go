@@ -71,7 +71,9 @@ func (r *entitySettingsResource) Schema(ctx context.Context, _ resource.SchemaRe
 			},
 			"name": schema.StringAttribute{
 				Description: "Name that overrides the integration's. Unsetting it goes back to " +
-					"the integration's name.",
+					"the integration's name. Since Home Assistant 2026.11, Home Assistant shows the " +
+					"device name in front of it, as it does for the integration's name, so leave the " +
+					"device name out (`Power`, not `Kitchen Lamp Power`).",
 				Optional: true,
 			},
 			"icon": schema.StringAttribute{
