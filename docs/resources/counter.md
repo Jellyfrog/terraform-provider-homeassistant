@@ -36,7 +36,7 @@ resource "homeassistant_counter" "doorbell_rings" {
 
 - `icon` (String) Icon, e.g. `mdi:toggle-switch`.
 - `id` (String) Helper ID, a slug such as `guest_mode`. Home Assistant derives it from `name` when the helper is created, and keeps it when the helper is renamed. Set it to choose the ID yourself. Changing it replaces the helper. Creation fails if the ID is taken. Import with this ID.
-- `initial` (Number) Value the counter starts with when Home Assistant starts and when it is reset, between `minimum` and `maximum`. Defaults to `0`. The provider never manages the current value.
+- `initial` (Number) Value the counter starts with when Home Assistant starts and when it is reset, between `minimum` and `maximum`. Defaults to `0`. Home Assistant before 2026.9 rejects a negative `initial` when applying. The provider never manages the current value.
 - `maximum` (Number) Highest value. Must not be less than `minimum`. Unset, the counter has no upper bound.
 - `minimum` (Number) Lowest value. Unset, the counter has no lower bound.
 - `restore` (Boolean) Whether the counter restores its value after a restart of Home Assistant. Defaults to `true`.

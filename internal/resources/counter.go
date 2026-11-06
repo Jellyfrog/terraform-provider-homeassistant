@@ -28,8 +28,8 @@ func NewCounter() resource.Resource {
 		fields: map[string]schema.Attribute{
 			"initial": schema.Int64Attribute{
 				Description: "Value the counter starts with when Home Assistant starts and when it is reset, " +
-					"between `minimum` and `maximum`. Defaults to `0`. The provider never manages the " +
-					"current value.",
+					"between `minimum` and `maximum`. Defaults to `0`. Home Assistant before 2026.9 rejects a " +
+					"negative `initial` when applying. The provider never manages the current value.",
 				Optional: true,
 				Computed: true,
 				Default:  int64default.StaticInt64(counterInitialDefault),

@@ -45,6 +45,8 @@ with `T` as the separator) with both.
 `counter` `minimum` and `maximum` are unset (null) for no bound; HA reports them as `null`. HA
 accepts a `step` of 0, so the check only rejects negative values. An unset `initial` is not
 checked against the range: HA clamps its default of `0` into it.
+HA before 2026.9 rejects a negative `initial` (`cv.positive_int`); 2026.9 and later accept any
+integer. The provider doesn't check the sign, so on older HA a negative `initial` fails at apply.
 
 `timer` `duration` is stored by HA as `H:MM:SS` (hours without leading zeros, not limited to 23),
 whatever spelling it was given in (`00:05:00`, `5:00`, a number of seconds). Any other spelling
