@@ -276,8 +276,8 @@ func TestWSContextCancel(t *testing.T) {
 // A caller's cancel that lands while its command is being written must not close the shared
 // connection. coder/websocket closes the connection when the write's ctx ends, and only stops
 // watching it after the frame is out, so a cancel just after the server got the command used to
-// kill the connection (TestWSContextCancel flaked on it). An already-cancelled ctx hits that
-// window every time.
+// kill the connection (TestWSContextCancel flaked on it). write with an already-cancelled ctx hits
+// that window every time; roundTrip would not get that far (TestWSCancelledCommandIsNotSent).
 func TestWSCancelDuringWriteKeepsConnection(t *testing.T) {
 	f := newFakeHA(t, echo)
 	c := f.client(t, testToken)
@@ -289,10 +289,10 @@ func TestWSCancelDuringWriteKeepsConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	cancel()
-	if _, err := conn.roundTrip(ctx, map[string]any{"type": "cancelled"}); err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v, want nil or context.Canceled", err)
+	if err := conn.write(ctx, map[string]any{"id": 999, "type": "cancelled"}); err != nil {
+		t.Fatalf("write: %v", err)
 	}
 
 	var got map[string]any
@@ -304,6 +304,43 @@ func TestWSCancelDuringWriteKeepsConnection(t *testing.T) {
 	}
 	if d := f.dials.Load(); d != 1 {
 		t.Errorf("dials = %d, want 1", d)
+	}
+}
+
+// A command cancelled while it waits for its turn to write is not sent: a create that HA carried
+// out would be lost to Tofu, which only sees context.Canceled.
+func TestWSCancelledCommandIsNotSent(t *testing.T) {
+	seen := make(chan string, 4)
+	f := newFakeHA(t, func(_ int32, s *fakeSession) {
+		for cmd := s.read(); cmd != nil; cmd = s.read() {
+			seen <- cmd["type"].(string)
+			s.reply(cmd, cmd)
+		}
+	})
+	c := f.client(t, testToken)
+	conn, err := c.connection(context.Background(), context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	conn.writeMu.Lock() // another command is being written
+	done := make(chan error, 1)
+	go func() {
+		_, err := conn.roundTrip(ctx, map[string]any{"type": "create"})
+		done <- err
+	}()
+	cancel()
+	conn.writeMu.Unlock()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+
+	if err := c.Command(context.Background(), "ping", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if typ := <-seen; typ != "ping" {
+		t.Errorf("server got %q first, want only ping", typ)
 	}
 }
 

@@ -54,7 +54,8 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   first form, and only changes to its fields made outside Tofu show up as drift (#64).
 - Fixed: cancelling a Home Assistant WebSocket command just as it was sent (e.g. Ctrl-C during
   an apply) could close the connection that other commands share, failing them with
-  `ErrConnectionLost`; the cancel now ends only that command.
+  `ErrConnectionLost`; the cancel now ends only that command, and a command cancelled before
+  it is sent is not sent.
 
 ## 1.0.0
 

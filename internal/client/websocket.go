@@ -316,6 +316,12 @@ func (conn *wsConn) roundTrip(ctx context.Context, msg map[string]any) (wsMessag
 	ch := make(chan wsMessage, 1)
 
 	conn.writeMu.Lock()
+	// A command cancelled while it waited for its turn is not sent: HA could carry out a create
+	// whose result no one reads.
+	if err := ctx.Err(); err != nil {
+		conn.writeMu.Unlock()
+		return wsMessage{}, err
+	}
 	conn.mu.Lock()
 	if conn.err != nil {
 		err := conn.err
