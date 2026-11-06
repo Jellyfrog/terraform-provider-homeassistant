@@ -197,9 +197,14 @@ func TestOptionsAnswerSectionNotAnObject(t *testing.T) {
 	}
 }
 
+// A null section is rejected too: it would read back as an object of the section's current values,
+// so the plan would never settle. Its fields are unset one by one instead.
 func TestOptionsAnswerSectionNull(t *testing.T) {
-	if err := decodeForm(t, sectionForm).CheckFields(map[string]any{"advanced": nil}); err != nil {
-		t.Fatal(err)
+	err := decodeForm(t, sectionForm).CheckFields(map[string]any{"advanced": nil})
+
+	want := `step "init" of options flow sets section "advanced" to a value that is not an object of its fields`
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v\nwant  %s", err, want)
 	}
 }
 

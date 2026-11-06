@@ -193,7 +193,7 @@ func ReadFields(fields []FormField, set map[string]any) map[string]any {
 }
 
 // CheckFields returns a *FlowUnknownFieldsError if set has fields that the form does not have, and
-// an error if it sets a section to something other than an object or null.
+// an error if it sets a section to something other than an object, null included.
 func (f FlowForm) CheckFields(set map[string]any) error {
 	if unknown := unknownFields(f.Fields, set); len(unknown) > 0 {
 		return &FlowUnknownFieldsError{Flow: f.Flow, StepID: f.StepID, Fields: unknown, Known: fieldNames(f.Fields)}
@@ -205,13 +205,14 @@ func (f FlowForm) CheckFields(set map[string]any) error {
 	return nil
 }
 
-// nonObjectSections returns the names in set, sorted, of sections whose value is neither an object
-// nor null, also inside sections, as "section.field".
+// nonObjectSections returns the names in set, sorted, of sections whose value is not an object
+// (null included: it would read back as the section's current values), also inside sections, as
+// "section.field".
 func nonObjectSections(fields []FormField, set map[string]any) []string {
 	var bad []string
 	for _, f := range fields {
 		v, ok := set[f.Name]
-		if !ok || v == nil || f.Type != "expandable" {
+		if !ok || f.Type != "expandable" {
 			continue
 		}
 		sub, isObject := v.(map[string]any)

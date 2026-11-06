@@ -70,8 +70,9 @@ func (r *integrationOptionsResource) Schema(_ context.Context, _ resource.Schema
 				Description: "The options to set, as an object from the options flow's `step_id` " +
 					"to the form's fields, e.g. `{ init = { upper = 20 } }`. Each form is answered " +
 					"with its current values, and the fields of the step with its `step_id` replace " +
-					"them; `null` unsets an optional field. A field the form does not have is an " +
-					"error, and so is a step the flow never shows. After an import, this holds " +
+					"them; `null` unsets an optional field. A section is an object of its own " +
+					"fields, never `null`. A field the form does not have is an error, and so is a " +
+					"step the flow never shows. After an import, this holds " +
 					"every field of the first form.",
 				CustomType: dyntype.Type{},
 				Required:   true,

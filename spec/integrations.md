@@ -146,10 +146,11 @@ the last one saves the options.
 **Writing the options.** The options flow is run with the same init. Each form is answered as the
 UI does when only some fields are edited: every field keeps its current value, and the fields of
 the step with the form's `step_id` replace it. A field set to `null` is left out, which unsets an
-optional option. A section is merged field by field. A form whose `step_id` has no step keeps its
-current values. The same `step_id` twice is an error (no loops), and so is a field that the form
-does not have, or a section set to anything but an object or `null`, before anything is
-submitted. The flow ends with `create_entry`; `abort` is an error, and so is a step in `steps`
+optional option. A section is merged field by field; it must be an object, not `null`, which
+would read back as the section's current values and never settle (unset its fields instead). A
+form whose `step_id` has no step keeps its current values. The same `step_id` twice is an error
+(no loops), and so is a field that the form does not have, or a section set to anything but an
+object, before anything is submitted. The flow ends with `create_entry`; `abort` is an error, and so is a step in `steps`
 whose `step_id` the flow never showed (a typo, or a form the flow skips): the options are saved
 by then, but that step's fields were not set. A menu, when reading or writing, is unsupported:
 the flow is aborted with an error before anything is submitted. Leaving fields out of the answer would not keep
