@@ -327,6 +327,8 @@ func (d *deviceDataSource) Configure(_ context.Context, req datasource.Configure
 }
 
 func (d *deviceDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	// ValidateConfig accepts unknown values. Here every value is known.
+	resp.Diagnostics.Append(exactlyOneOf(ctx, req.Config, "device_id", "name", "identifier")...)
 	var cfg deviceLookupModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	if resp.Diagnostics.HasError() {
