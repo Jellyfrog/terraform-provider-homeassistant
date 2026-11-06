@@ -20,6 +20,8 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   updated. `govulncheck` reported reachable vulnerabilities before (11 in modules, at least 10 in
   the Go 1.26.0 standard library: HTTP/2 memory and CPU exhaustion and crashes in the plugin's
   gRPC server, `crypto/tls`, `net/url`) and none after.
+- Security: `github.com/klauspost/compress` (tests only) is updated to 1.20.2 for GO-2026-6865, a
+  panic on two-block zstd frames that `govulncheck` reports as reachable.
 - CI: a `Security` workflow runs `govulncheck`, `gosec`, CodeQL and Trivy (dependency CVEs and
   committed secrets) on every PR, on `main` and weekly. Reachable vulnerabilities, `gosec` findings
   of medium severity or above, and fixable CRITICAL/HIGH Trivy findings fail the run; everything
