@@ -296,6 +296,21 @@ func (conn *wsConn) fail(cause error) {
 	_ = conn.ws.CloseNow()
 }
 
+// write sends msg within ctx's deadline, but ignores ctx's cancellation. coder/websocket closes the
+// connection when the ctx of a write ends, and stops watching that ctx only after the frame is
+// sent, so a caller who cancels just as its command goes out would close the connection that
+// every command shares. A deadline that passes mid-write still ends it: the command then fails
+// the connection anyway (Command).
+func (conn *wsConn) write(ctx context.Context, msg map[string]any) error {
+	wctx := context.WithoutCancel(ctx)
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		wctx, cancel = context.WithDeadline(wctx, deadline)
+		defer cancel() // only after Write returned, when the library no longer watches wctx
+	}
+	return wsjson.Write(wctx, conn.ws, msg)
+}
+
 // roundTrip assigns the next id, sends msg, and waits for the matching result.
 func (conn *wsConn) roundTrip(ctx context.Context, msg map[string]any) (wsMessage, error) {
 	ch := make(chan wsMessage, 1)
@@ -313,7 +328,7 @@ func (conn *wsConn) roundTrip(ctx context.Context, msg map[string]any) (wsMessag
 	msg["id"] = id
 	conn.pending[id] = ch
 	conn.mu.Unlock()
-	err := wsjson.Write(ctx, conn.ws, msg)
+	err := conn.write(ctx, msg)
 	conn.writeMu.Unlock()
 
 	if err != nil {

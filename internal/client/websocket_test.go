@@ -273,6 +273,40 @@ func TestWSContextCancel(t *testing.T) {
 	}
 }
 
+// A caller's cancel that lands while its command is being written must not close the shared
+// connection. coder/websocket closes the connection when the write's ctx ends, and only stops
+// watching it after the frame is out, so a cancel just after the server got the command used to
+// kill the connection (TestWSContextCancel flaked on it). An already-cancelled ctx hits that
+// window every time.
+func TestWSCancelDuringWriteKeepsConnection(t *testing.T) {
+	f := newFakeHA(t, echo)
+	c := f.client(t, testToken)
+	if err := c.Command(context.Background(), "ping", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := c.connection(context.Background(), context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := conn.roundTrip(ctx, map[string]any{"type": "cancelled"}); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want nil or context.Canceled", err)
+	}
+
+	var got map[string]any
+	if err := c.Command(context.Background(), "ping", nil, &got); err != nil {
+		t.Fatalf("after cancel: %v", err)
+	}
+	if !conn.alive() {
+		t.Error("the connection was closed")
+	}
+	if d := f.dials.Load(); d != 1 {
+		t.Errorf("dials = %d, want 1", d)
+	}
+}
+
 func TestWSTimeout(t *testing.T) {
 	f := newFakeHA(t, func(_ int32, s *fakeSession) {
 		for s.read() != nil { // never answer

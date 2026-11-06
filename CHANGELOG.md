@@ -52,6 +52,9 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   in the UI or by `homeassistant_integration`. Only the fields in `steps` are managed. Home
   Assistant shows only the flow's first form without saving, so import reads the options of the
   first form, and only changes to its fields made outside Tofu show up as drift (#64).
+- Fixed: cancelling a Home Assistant WebSocket command just as it was sent (e.g. Ctrl-C during
+  an apply) could close the connection that other commands share, failing them with
+  `ErrConnectionLost`; the cancel now ends only that command.
 
 ## 1.0.0
 
