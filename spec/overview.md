@@ -58,11 +58,11 @@ Which operation uses which transport:
 | Config flows (create, reconfigure) | REST | `POST /api/config/config_entries/flow`, `POST/DELETE …/flow/<flow_id>` |
 | Delete config entry | REST | `DELETE /api/config/config_entries/entry/<entry_id>` |
 | Read config entries | WS | `config_entries/get` |
-| Floor / area / label registry | WS | `config/<x>_registry/list|create|update|delete` |
-| Entity / device registry | WS | `config/entity_registry/get|update`, `config/device_registry/list|update` |
-| Helpers (`input_*`, `counter`, `timer`, `schedule`) | WS | `<domain>/list|create|update|delete` (id field `<domain>_id`) |
+| Floor / area / label registry | WS | `config/<x>_registry/list\|create\|update\|delete` |
+| Entity / device registry | WS | `config/entity_registry/get\|update`, `config/device_registry/list\|update` |
+| Helpers (`input_*`, `counter`, `timer`, `schedule`) | WS | `<domain>/list\|create\|update\|delete` (id field `<domain>_id`) |
 | Energy dashboard preferences | WS | `energy/get_prefs`, `energy/save_prefs` |
-| Dashboards | WS | `lovelace/dashboards/list|create|update|delete`, `lovelace/config`, `lovelace/config/save|delete` |
+| Dashboards | WS | `lovelace/dashboards/list\|create\|update\|delete`, `lovelace/config`, `lovelace/config/save\|delete` |
 
 ## Inventory
 
