@@ -151,7 +151,8 @@ current values. The same `step_id` twice is an error (no loops), and so is a fie
 does not have, or a section set to anything but an object or `null`, before anything is
 submitted. The flow ends with `create_entry`; `abort` is an error, and so is a step in `steps`
 whose `step_id` the flow never showed (a typo, or a form the flow skips): the options are saved
-by then, but that step's fields were not set. Leaving fields out of the answer would not keep
+by then, but that step's fields were not set. A menu, when reading or writing, is unsupported:
+the flow is aborted with an error before anything is submitted. Leaving fields out of the answer would not keep
 them: options flows built on `SchemaOptionsFlowHandler` remove optional options that a submit
 omits.
 

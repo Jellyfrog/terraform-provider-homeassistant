@@ -19,12 +19,15 @@ func optionsInit(entryID string) map[string]any {
 }
 
 // Form starts the options flow of the config entry, returns its first form, and aborts the flow
-// (`DELETE`), so nothing changes. The form's suggested values are the current options
+// (`DELETE`), so nothing changes. A menu is unsupported (FlowUnsupportedError). The form's suggested values are the current options
 // (spec/integrations.md, "homeassistant_integration_options").
 func (f OptionsFlows) Form(ctx context.Context, entryID string) (FlowForm, error) {
 	name := "options flow of config entry " + entryID
 	var form FlowForm
 	res, err := f.driver.run(ctx, name, optionsInit(entryID), func(_ context.Context, ff FlowForm) (map[string]any, error) {
+		if ff.Menu {
+			return nil, &FlowUnsupportedError{Flow: ff.Flow, Type: "menu", StepID: ff.StepID}
+		}
 		form = ff
 		return nil, errFormRead
 	})
@@ -76,10 +79,14 @@ func (f OptionsFlows) Set(ctx context.Context, entryID string, steps map[string]
 // edited: every field keeps its current value (CurrentValues), and the fields of the step with
 // the form's step_id replace it. A field set to nil is left out, which unsets an optional option;
 // a section is merged field by field. A form whose step_id has no step is answered with its
-// current values. The same step_id a second time is an error, so the flow cannot loop.
+// current values. The same step_id a second time is an error, so the flow cannot loop. A menu is
+// unsupported: its choice is not an option the flow keeps.
 func OptionsAnswer(steps map[string]map[string]any) FlowAnswer {
 	seen := map[string]bool{}
 	return func(_ context.Context, form FlowForm) (map[string]any, error) {
+		if form.Menu {
+			return nil, &FlowUnsupportedError{Flow: form.Flow, Type: "menu", StepID: form.StepID}
+		}
 		if seen[form.StepID] {
 			return nil, &FlowStepMissingError{Flow: form.Flow, StepID: form.StepID, Repeated: true}
 		}

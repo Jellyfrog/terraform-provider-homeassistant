@@ -233,3 +233,40 @@ func TestReadFields(t *testing.T) {
 		t.Errorf("read = %s", js)
 	}
 }
+
+// An options flow that shows a menu is unsupported, as before the driver learned menus for config
+// flows: field values cannot choose one of its options.
+const optionsMenu = `{"type":"menu","flow_id":"f1","handler":"E1","step_id":"init",
+	"menu_options":["general","advanced"]}`
+
+func TestOptionsFormMenuIsUnsupported(t *testing.T) {
+	f := &fakeFlow{t: t, path: optionsPath, init: optionsMenu}
+
+	_, err := NewOptionsFlows(serve(t, f.handle)).Form(t.Context(), "E1")
+
+	var unsupported *FlowUnsupportedError
+	if !errors.As(err, &unsupported) || unsupported.Type != "menu" || unsupported.StepID != "init" {
+		t.Fatalf("err = %v, want an unsupported menu", err)
+	}
+	if want := []string{"f1"}; !reflect.DeepEqual(f.deleted, want) {
+		t.Errorf("deleted = %v, want the flow aborted", f.deleted)
+	}
+}
+
+func TestOptionsSetMenuIsUnsupported(t *testing.T) {
+	f := &fakeFlow{t: t, path: optionsPath, init: optionsMenu}
+
+	err := NewOptionsFlows(serve(t, f.handle)).Set(t.Context(), "E1",
+		map[string]map[string]any{"init": {"next_step_id": "general"}})
+
+	var unsupported *FlowUnsupportedError
+	if !errors.As(err, &unsupported) || unsupported.Type != "menu" || unsupported.StepID != "init" {
+		t.Fatalf("err = %v, want an unsupported menu", err)
+	}
+	if len(f.submitted) != 0 {
+		t.Errorf("submitted = %v, want nothing", f.submitted)
+	}
+	if want := []string{"f1"}; !reflect.DeepEqual(f.deleted, want) {
+		t.Errorf("deleted = %v, want the flow aborted", f.deleted)
+	}
+}
