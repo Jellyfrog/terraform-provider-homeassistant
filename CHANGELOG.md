@@ -44,6 +44,9 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   `homeassistant_dashboard`. Import ID `default`. Create fails if the dashboard already has a
   saved config (import it instead); destroy deletes the saved config, so Home Assistant
   generates the dashboard automatically again (#66).
+- `homeassistant_integration`: config flows that show a menu, e.g. the template and group
+  helpers. The menu's step answers with `next_step_id`, the chosen option:
+  `steps = { user = { next_step_id = "sensor" }, sensor = { ... } }` (#65).
 
 ## 1.0.0
 
