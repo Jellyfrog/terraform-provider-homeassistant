@@ -344,6 +344,25 @@ func TestWSCancelledCommandIsNotSent(t *testing.T) {
 	}
 }
 
+// A reply that is already there when the command is cancelled is returned: the command ran in HA,
+// and its result (e.g. the ID of a created object) must not be dropped. select would pick either at
+// random, so this runs many times.
+func TestWSReplyBeforeCancelIsReturned(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := range 200 {
+		ch := make(chan wsMessage, 1)
+		conn := &wsConn{pending: map[int64]chan wsMessage{1: ch}}
+		ch <- wsMessage{ID: 1, Success: true}
+
+		reply, err := conn.await(ctx, 1, ch)
+
+		if err != nil || !reply.Success {
+			t.Fatalf("run %d: reply = %+v, err = %v, want the reply", i, reply, err)
+		}
+	}
+}
+
 func TestWSTimeout(t *testing.T) {
 	f := newFakeHA(t, func(_ int32, s *fakeSession) {
 		for s.read() != nil { // never answer

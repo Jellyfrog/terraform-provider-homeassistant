@@ -265,13 +265,14 @@ func (c *WSClient) readLoop(conn *wsConn) {
 		if msg.Type != "result" {
 			continue // events: the client holds no subscriptions
 		}
+		// Delivered under mu (ch has room for the one result), so a waiter that gives up and
+		// removes its id under mu either finds the result in ch or gets none (await).
 		conn.mu.Lock()
-		ch, ok := conn.pending[msg.ID]
-		delete(conn.pending, msg.ID)
-		conn.mu.Unlock()
-		if ok {
+		if ch, ok := conn.pending[msg.ID]; ok {
+			delete(conn.pending, msg.ID)
 			ch <- msg
 		}
+		conn.mu.Unlock()
 	}
 }
 
@@ -346,19 +347,38 @@ func (conn *wsConn) roundTrip(ctx context.Context, msg map[string]any) (wsMessag
 		return wsMessage{}, fmt.Errorf("%w: %w", ErrConnectionLost, err)
 	}
 
+	return conn.await(ctx, id, ch)
+}
+
+// await waits for the result of command id on ch, or for ctx to end. A result that has arrived by
+// the time ctx ends is returned, not dropped: the command ran in HA, and its result (e.g. the ID of
+// a created object) is needed. select alone would pick either at random.
+func (conn *wsConn) await(ctx context.Context, id int64, ch chan wsMessage) (wsMessage, error) {
 	select {
 	case reply, ok := <-ch:
-		if !ok {
-			conn.mu.Lock()
-			err := conn.err
-			conn.mu.Unlock()
-			return wsMessage{}, err
-		}
-		return reply, nil
+		return conn.received(reply, ok)
 	case <-ctx.Done():
 		conn.mu.Lock()
 		delete(conn.pending, id)
 		conn.mu.Unlock()
+		// readLoop delivers under mu, so after that delete a result is in ch or never comes.
+		select {
+		case reply, ok := <-ch:
+			if ok {
+				return reply, nil
+			}
+		default:
+		}
 		return wsMessage{}, ctx.Err()
 	}
+}
+
+// received returns the result read from ch, or the connection's error if ch was closed.
+func (conn *wsConn) received(reply wsMessage, ok bool) (wsMessage, error) {
+	if ok {
+		return reply, nil
+	}
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	return wsMessage{}, conn.err
 }
