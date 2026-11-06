@@ -62,7 +62,9 @@ order; another order would read back differently and show as drift. The check mi
 
 A range in HA can carry a `data` object: custom values (strings, numbers, booleans) that show up in
 the entity's attributes while the range is active. It is an optional string attribute holding JSON,
-written with `jsonencode(...)`, so an update sends it and never clears what HA has. HA's own
+written with `jsonencode(...)`. Like any optional attribute (see above), a range without `data` in
+config clears that range's data in HA on update; the plan shows the removal first, so keep the
+`data` you want to retain in config. HA's own
 numbers keep their type (`1` stays an integer, `1.5` a float). The plan-time check requires a JSON
 object of strings, numbers and booleans, which is what HA accepts. The attribute uses the custom
 type `dyntype.JSONStringType`, which compares by semantic equality like dynamic config (ADR-0006):
