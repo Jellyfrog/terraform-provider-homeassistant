@@ -169,6 +169,8 @@ func (d *areaDataSource) Configure(_ context.Context, req datasource.ConfigureRe
 }
 
 func (d *areaDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	// ValidateConfig accepts unknown values. Here every value is known.
+	resp.Diagnostics.Append(exactlyOneOf(ctx, req.Config, "area_id", "name")...)
 	var cfg areaModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &cfg)...)
 	if resp.Diagnostics.HasError() {
