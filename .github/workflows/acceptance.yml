@@ -2,6 +2,8 @@ name: Acceptance tests
 
 on:
   pull_request:
+  # Started by vuln-fix.yml for its pull request, which its token cannot trigger (ADR-0027).
+  workflow_dispatch:
   push:
     branches: [main]
 
