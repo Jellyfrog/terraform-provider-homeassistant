@@ -45,7 +45,10 @@ One `HAClient` holds:
   dial `ErrUnreachable`, and a `success: false` result a `*WSError` carrying `code` and `message`.
   The provider `timeout` bounds each command, including a dial. A dial that times out is
   `ErrUnreachable`. A command that times out drops the connection, so a half-open socket is not
-  reused and the next command dials again.
+  reused and the next command dials again. A cancelled command returns `context.Canceled` and
+  leaves the connection open, even when the cancel lands while the command is being sent; its late
+  reply is dropped. A command cancelled before its turn to be sent is not sent. A reply that
+  arrives before the cancel is returned, so the result of a create is not lost.
 
 Which operation uses which transport:
 
