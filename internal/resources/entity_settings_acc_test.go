@@ -40,6 +40,33 @@ func moonEntity(t *testing.T) string {
 	return entityID
 }
 
+// templateSensor creates a template sensor named name and returns its entity ID once it is in the
+// entity registry.
+func templateSensor(t *testing.T, name string) string {
+	t.Helper()
+	c := haClient(t)
+	ctx := context.Background()
+	entryID, err := client.NewConfigFlows(c.REST).Run(ctx, "template", "", []client.FlowStep{
+		{StepID: "user", Data: map[string]any{"next_step_id": "sensor"}},
+		{StepID: "sensor", Data: map[string]any{"name": name, "state": "{{ 1 }}"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = client.NewConfigEntries(c.WS, c.REST).Delete(context.Background(), entryID) })
+
+	entities := client.Entities(c.WS)
+	var entityID string
+	acctest.Eventually(t, 30*time.Second, "the template sensor in the entity registry", func() (bool, error) {
+		list, err := entities.List(ctx)
+		if i := slices.IndexFunc(list, func(e client.EntityEntry) bool { return e.Platform == "template" && deref(e.OriginalName) == name }); i >= 0 {
+			entityID = list[i].EntityID
+		}
+		return entityID != "", err
+	})
+	return entityID
+}
+
 // checkEntityEntry runs check on the registry entry of entityID, which must exist.
 func checkEntityEntry(t *testing.T, entityID string, check func(client.EntityEntry) error) resource.TestCheckFunc {
 	return func(*terraform.State) error {
@@ -220,4 +247,138 @@ resource "homeassistant_entity_settings" "missing" {
 			},
 		},
 	})
+}
+
+// renameEntity renames the entity from to to, as the entity settings dialog does.
+func renameEntity(t *testing.T, from, to string) {
+	t.Helper()
+	_, err := client.Entities(haClient(t).WS).Update(context.Background(), from, map[string]any{"new_entity_id": to})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAccEntitySettings_Rename(t *testing.T) {
+	const addr = "homeassistant_entity_settings.moon"
+	entityID := moonEntity(t)
+	renamed, final := "sensor.acc_moon_renamed", "sensor.acc_moon_final"
+	// Entity IDs a rename cannot take: another sensor's, and one in another domain.
+	ctx := context.Background()
+	takenSensor := templateSensor(t, "Acc Taken")
+	taken, err := inputBooleans(t).Create(ctx, map[string]any{"name": "Acc Taken"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = inputBooleans(t).Delete(ctx, taken.HelperID()) })
+
+	var registryID string
+	settings := `
+  name = "Acc Moon Phase"
+`
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(t) },
+		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
+		// Destroy resets the name on the renamed entity and does not rename it back.
+		CheckDestroy: checkEntityEntry(t, final, func(e client.EntityEntry) error {
+			if e.Name != nil {
+				return fmt.Errorf("name = %s, want it reset", deref(e.Name))
+			}
+			return nil
+		}),
+		Steps: []resource.TestStep{
+			{
+				Config: entitySettingsConfig(entityID, settings),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrWith(addr, "id", func(v string) error {
+						registryID = v
+						if v == "" {
+							return fmt.Errorf("id is empty")
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// Renamed in the UI: the plan renames it back in place.
+				PreConfig: func() { renameEntity(t, entityID, renamed) },
+				Config:    entitySettingsConfig(entityID, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(addr, "entity_id", entityID),
+					checkEntityEntry(t, entityID, func(e client.EntityEntry) error {
+						if e.ID != registryID || deref(e.Name) != "Acc Moon Phase" {
+							return fmt.Errorf("entry = %+v, want id %s renamed back", e, registryID)
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// Renamed in the UI and in config: nothing to do.
+				PreConfig: func() { renameEntity(t, entityID, renamed) },
+				Config:    entitySettingsConfig(renamed, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+			{
+				// Renamed in config: an in-place update keeps the registry ID and the settings.
+				Config: entitySettingsConfig(final, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(addr, "entity_id", final),
+					resource.TestCheckResourceAttrWith(addr, "id", func(v string) error {
+						if v != registryID {
+							return fmt.Errorf("id = %s, want %s", v, registryID)
+						}
+						return nil
+					}),
+					checkEntityEntry(t, final, func(e client.EntityEntry) error {
+						if e.ID != registryID || deref(e.Name) != "Acc Moon Phase" {
+							return fmt.Errorf("entry = %+v", e)
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// Another sensor has the entity ID: HA's error, and the hint to replace instead.
+				Config:      entitySettingsConfig(takenSensor, settings),
+				ExpectError: regexp.MustCompile(`(?s)already\s+registered.*sensor\.acc_taken.*tofu\s+apply\s+-replace`),
+			},
+			{
+				// An entity ID in another domain: HA rejects the rename, with the same hint.
+				Config:      entitySettingsConfig("input_boolean.acc_taken", settings),
+				ExpectError: regexp.MustCompile(`(?s)input_boolean\.acc_taken.*another\s+domain.*tofu\s+apply\s+-replace`),
+			},
+			{
+				// The failed rename left the state alone.
+				Config: entitySettingsConfig(final, settings),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+			{
+				// Import by entity ID fills in the registry ID.
+				ResourceName:                         addr,
+				ImportState:                          true,
+				ImportStateId:                        final,
+				ImportStateVerify:                    true,
+				ImportStateVerifyIdentifierAttribute: "entity_id",
+				ImportStateVerifyIgnore:              []string{"name"},
+			},
+		},
+	})
+}
+
+// State written by the release, from 1.0.0 on without the registry ID (ADR-0025), plans empty
+// and gets the ID.
+func TestAccEntitySettings_upgrade(t *testing.T) {
+	acctest.UpgradeTest(t, entitySettingsConfig(moonEntity(t), `
+  name = "Acc Moon Phase"
+`), resource.TestCheckResourceAttrSet("homeassistant_entity_settings.moon", "id"))
 }

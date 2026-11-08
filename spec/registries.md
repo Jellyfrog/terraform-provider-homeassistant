@@ -135,11 +135,14 @@ The entity is identified by its registry `id`, which a rename does not change:
   `list` and find the entry by `id`. If none has it → remove from state. `entity_id` is always
   refreshed, so a rename made elsewhere shows as drift and the next apply renames it back. State
   without `id` (written before ADR-0025) gets it from the `get` by `entity_id`.
-- **Update:** a changed `entity_id` is sent as `new_entity_id`, together with the other changed
-  fields, in one `update`. HA rejects an `entity_id` that another entity has; the error suggests
-  `tofu apply -replace=<address>` to manage that other entity instead.
-- **Delete:** resets the other configured fields on the entity's current `entity_id`, and keeps
-  that entity ID.
+- **Update:** finds the entry by `id`, as Read does, and updates it under its current
+  `entity_id`: with `-refresh=false`, the `entity_id` in state may be stale, or another entity's.
+  A changed `entity_id` is sent as `new_entity_id`, together with the other changed fields, in one
+  `update`. HA rejects an `entity_id` that another entity has, or one in another
+  domain; the error suggests `tofu apply -replace=<address>` to manage another entity instead.
+- **Delete:** finds the entry by `id`, as Update does. Resets the other configured fields on the
+  entity's current `entity_id`, and keeps that entity ID. If the entry is gone, by `id`, there is
+  nothing to reset.
 - A resource in `for_each` keyed by entity ID changes address when it is renamed. A `moved`
   block keeps it, and the resource docs show one:
 

@@ -72,6 +72,21 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   Removing recorded steps from the configuration plans an in-place update that only forgets them,
   instead of failing. After upgrading, a state with recorded steps plans no changes, with or
   without `ignore_changes`.
+- Changed: `homeassistant_entity_settings` follows the entity's registry ID, exposed as the new
+  computed `id` (ADR-0025, #83). Changing `entity_id` now renames the entity in place instead of
+  replacing the resource, and a rename made in the UI shows as a change of `entity_id` instead of
+  removing the resource from state. Destroy does not rename the entity back. State from earlier
+  versions gets `id` on the next refresh. A `for_each` keyed by entity ID needs a `moved` block
+  for a rename (see the resource docs).
+  If your configuration changes `entity_id` to point the resource at another entity that already
+  exists, the result differs from 1.0.0. 1.0.0 replaced the resource: it reset the configured
+  fields on the old entity and set them on the new one. Now the plan shows an in-place rename,
+  and the apply fails with Home Assistant's "Entity with this ID is already registered" and a
+  hint. Nothing changes in Home Assistant, and the state still points at the old entity. To
+  switch entities, run `tofu apply -replace=<address>`. The same goes for an entity ID in another
+  domain, which 1.0.0 also replaced: Home Assistant doesn't rename across domains, so the apply
+  fails with its error and the hint. A change to an entity ID that no entity has used to time
+  out. Now it renames the entity.
 
 ## 1.0.0
 
