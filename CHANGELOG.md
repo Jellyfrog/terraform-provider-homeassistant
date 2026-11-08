@@ -69,8 +69,9 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   import writes a configuration that plans without errors (`steps = null`). Only creating or
   replacing an entry needs a step, in `steps` or, for a form of secrets only, in
   `sensitive_steps`; a plan that would do it without one fails before anything is deleted.
-  Removing recorded steps from the configuration only forgets them, instead of failing. States
-  with recorded steps, with or without `ignore_changes`, plan no changes.
+  Removing recorded steps from the configuration plans an in-place update that only forgets them,
+  instead of failing. After upgrading, a state with recorded steps plans no changes, with or
+  without `ignore_changes`.
 
 ## 1.0.0
 
