@@ -73,25 +73,35 @@ while IFS=$'\t' read -r module fixed advisory; do
   esac
 done <<<"$findings"
 
-# The lowest version that fixes every finding of a module. A fix may exist on several release
-# branches (1.2.5 and 1.3.2), so raising the version for one finding can land on a branch where
-# another one is fixed only later: repeat until no finding asks for more. A finding whose fixes all
-# lie below the version is taken as fixed by it.
+# fixes <version> <fixed versions>: whether a version fixes a finding. The reports list one fixed
+# version per release branch (1.2.5 and 1.3.2), without affected ranges, so a version counts as
+# fixed when it is at or above the highest fix, or at or above a fix on its own major.minor line.
+line_of() { cut -d. -f1,2 <<<"$1"; }
+fixes() {
+  local v="$1" f
+  shift
+  for f in "$@"; do
+    if atleast "$v" "$f" && [[ "$(line_of "$v")" == "$(line_of "$f")" ]]; then return 0; fi
+  done
+  atleast "$v" "$(printf '%s\n' "$@" | sort -V | tail -1)"
+}
+
+# The lowest version that fixes every finding of a module: start at the current version (which
+# every finding affects) and raise it to the next fix of any finding it does not fix, until all are
+# fixed. Raising for one finding can land on a branch where another is fixed only later; the loop
+# goes on until none is left.
 for module in "${!from[@]}"; do
-  v="${from[$module]}" first=1 changed=1
+  v="${from[$module]}" changed=1
   while ((changed)); do
     changed=0
     while read -r line; do
       [[ -n "$line" ]] || continue
+      # shellcheck disable=SC2086 # the fixed versions of one finding, space-separated
+      if [[ "$v" != "${from[$module]}" ]] && fixes "$v" $line; then continue; fi
       for f in $(tr ' ' '\n' <<<"$line" | sort -V); do
-        # The first round needs a version above the current one; later rounds accept equality.
-        if { ((first)) && newer "$f" "${from[$module]}"; } || { ((!first)) && atleast "$f" "$v"; }; then
-          if newer "$f" "$v"; then v="$f" changed=1; fi
-          break
-        fi
+        if newer "$f" "$v"; then v="$f" changed=1; break; fi
       done
     done <<<"${fixes[$module]}"
-    first=0
   done
   [[ "$v" == "${from[$module]}" ]] || target[$module]="$v"
 done

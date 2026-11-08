@@ -65,7 +65,8 @@ The maintainer also chose how that pull request starts its checks, and how much 
 - A gate that turns red on a new advisory gets a fix pull request within a day, before GitHub
   reviews the advisory, and no indirect dependency moves without a finding.
 - A finding that fails neither gate (below HIGH and not reachable) stays open as a code scanning
-  alert and is not bumped. So does a finding without a fix, which still fails its gate.
+  alert and is not bumped. So does a finding without a fix: Trivy's gate ignores it (it skips
+  unfixed findings), govulncheck's gate still fails on it if it is reachable.
 - The repository must allow GitHub Actions to create pull requests ("Allow GitHub Actions to create
   and approve pull requests"). That setting also lets a workflow's token approve pull requests; no
   workflow here does, and merging still needs toelke's LGTM.
