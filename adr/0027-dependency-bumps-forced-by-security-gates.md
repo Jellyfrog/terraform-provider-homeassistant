@@ -44,28 +44,36 @@ The maintainer also chose how that pull request starts its checks, and how much 
 
 - Dependabot's weekly Go update stays limited to direct dependencies.
 - `.github/workflows/vuln-fix.yml` runs daily, by hand, and after a failed Security run on `main`.
-  It runs the gates' scans on `main` (Trivy: CRITICAL and HIGH with a fix; govulncheck: reachable
-  findings with a fix) and `scripts/vuln-fix.sh` bumps each module they name to the lowest version
-  that fixes all of its findings; the standard library bumps the `toolchain` line. Nothing else is
-  bumped, except what Go's minimal version selection raises along with it, which the pull request
-  lists.
-- Build and unit tests must pass, then the workflow pushes branch `deps/vuln-fixes` and opens or
-  updates one pull request from it, as `github-actions[bot]`.
-- The workflow starts CI, Acceptance tests and Security on that branch with `workflow_dispatch`.
-  These workflows accept it, and CI's `rebased` check compares a dispatched branch against `main`.
+  It runs the gates' scans on `main`, and `scripts/vuln-fix.sh` takes the findings each gate fails
+  on: Trivy's CRITICAL and HIGH findings, reachable or not; govulncheck's reachable findings, of any
+  severity. For each module they name that has a fix, it picks the lowest version that fixes all of
+  its findings, and bumps all of them in one `go get`; the standard library bumps the `toolchain`
+  line. Nothing else is bumped, except what Go's minimal version selection raises along with it,
+  which the pull request lists. A module with a `replace` directive is not bumped; the run fails.
+- Build, unit tests and both gates must pass on the bumped tree. Then the workflow pushes branch
+  `deps/vuln-fixes` and opens or updates one pull request from it, as `github-actions[bot]`.
+- The job that builds and tests the new dependency code has a read-only token and keeps no
+  credentials in the checkout. A second job holds the write token, applies the bump as a patch,
+  and runs no Go code: a compromised release can run code during the tests, but cannot push.
+- The workflow starts CI, Acceptance tests and Security on that branch with `workflow_dispatch`,
+  each one that has no run for the branch's head yet. These workflows accept it, and CI's `rebased`
+  check compares a dispatched branch against `main`.
 - The pull request is merged like any other: after toelke's LGTM, through `scripts/lgtm-check.sh`.
 
 ## Consequences
 
 - A gate that turns red on a new advisory gets a fix pull request within a day, before GitHub
   reviews the advisory, and no indirect dependency moves without a finding.
-- Unreachable findings and findings below HIGH stay open as code scanning alerts; they fail no
-  gate and are not bumped.
+- A finding that fails neither gate (below HIGH and not reachable) stays open as a code scanning
+  alert and is not bumped. So does a finding without a fix, which still fails its gate.
 - The repository must allow GitHub Actions to create pull requests ("Allow GitHub Actions to create
   and approve pull requests"). That setting also lets a workflow's token approve pull requests; no
   workflow here does, and merging still needs toelke's LGTM.
 - Checks started by `workflow_dispatch` attach to the branch's head commit. GitHub shows them on the
   pull request and counts them for the `main` ruleset, but does not rerun them on its own: a push
   to the branch by anyone but the workflow needs the checks started again (`gh workflow run`).
-- If the minimal fix does not build or pass the unit tests, no pull request is opened and the run
-  fails, so the problem shows up in the Actions tab instead of as a broken pull request.
+- If the minimal fix does not build, fails the unit tests, or leaves a gate red (a fix on another
+  release branch than the version picked, say), no pull request is opened and the run fails, so the
+  problem shows up in the Actions tab instead of as a broken pull request.
+- A check workflow whose dispatch failed is started again by the next run, even when the branch is
+  unchanged.
