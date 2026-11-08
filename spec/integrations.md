@@ -70,7 +70,7 @@ resource "homeassistant_integration" "answer" {
 | Argument | Type | |
 |---|---|---|
 | `domain` | string | required, forces replacement |
-| `steps` | object: `step_id` → object of fields (dynamic) | optional, but a create needs a step here or in `sensitive_steps`; at least one step if set; forces replacement unless no step before or after (see **Import**) |
+| `steps` | object: `step_id` → object of fields (dynamic) | optional, but a create needs a step here or in `sensitive_steps`; at least one step if set; forces replacement unless no step before or after (see **Import**, ADR-0028) |
 | `sensitive_steps` | same shape as `steps`, sensitive | optional; forces replacement, as `steps` |
 
 The steps are two dynamic objects keyed by `step_id` (ADR-0021, which supersedes ADR-0014's
@@ -276,7 +276,7 @@ flow ends with the abort `reconfigure_successful`.
   subentry needs steps only to be replaced. Steps written later are only recorded, without a
   reconfigure flow; removing them again only forgets them. `steps` and `sensitive_steps` both
   null in state mean the provider does not know the steps; either one alone is enough to know
-  them (ADR-0021).
+  them (ADR-0028).
 - **Update:** changed `steps` or `sensitive_steps` run the subentry's **reconfigure flow** if
   `supports_reconfigure` is true in state. It changes the subentry's data in place: the
   `subentry_id`, and with it the subentry's devices and entities, stay. Types without a reconfigure
