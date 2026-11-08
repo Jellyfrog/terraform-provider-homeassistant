@@ -151,8 +151,6 @@ func subentryStepsChanged(ctx context.Context, req planmodifier.DynamicRequest, 
 	resp.RequiresReplace = !noSteps(prior, priorSecret) && !noSteps(planned, plannedSecret) && !reconfigurable.ValueBool()
 }
 
-var sensitiveStepsPath = path.Root("sensitive_steps")
-
 // noSteps reports whether neither `steps` nor `sensitive_steps` is set, which means the provider
 // does not know the steps: in state after an import or after both were removed from the
 // configuration, in a plan when both are left out. The steps cannot be read back, so the first
