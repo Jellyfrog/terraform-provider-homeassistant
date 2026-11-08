@@ -406,3 +406,26 @@ func TestEntitySettingsDeleteGone(t *testing.T) {
 		t.Errorf("update params = %v, want no update for a gone entity", f.updateParams)
 	}
 }
+
+// With a rename since the last refresh (`-refresh=false`), the entity ID in state can be another
+// entity's: Update changes the entity found by its registry ID, never that other one.
+func TestEntitySettingsUpdateAfterRename(t *testing.T) {
+	f := &fakeEntityRegistry{entries: map[string]client.EntityEntry{
+		"sensor.renamed": {ID: "abc", EntityID: "sensor.renamed", Platform: "moon"},
+		"sensor.old":     {ID: "def", EntityID: "sensor.old", Platform: "moon"},
+	}}
+	state := entitySettingsState("abc", "sensor.old")
+	state.Name = types.StringValue("Moon")
+	plan := state
+	plan.EntityID = types.StringValue("sensor.renamed")
+	plan.Name = types.StringValue("Full Moon")
+
+	got, diags := updateEntitySettings(t, f, state, plan)
+	checkDiags(t, diags, "")
+	if f.updateParams["entity_id"] != "sensor.renamed" || f.updateParams["new_entity_id"] != nil {
+		t.Errorf("update params = %v, want sensor.renamed updated without a rename", f.updateParams)
+	}
+	if got.ID.ValueString() != "abc" {
+		t.Errorf("id in state = %v, want abc", got.ID)
+	}
+}

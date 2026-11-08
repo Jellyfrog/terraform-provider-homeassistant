@@ -270,19 +270,20 @@ func (r *entitySettingsResource) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// Read refreshed the entity ID in state, so it is the entity's current one.
-	entityID := state.EntityID.ValueString()
+	// The entity is found by its registry ID: the entity ID in state is stale after a rename since
+	// the last refresh (`-refresh=false`), and may even be another entity's by now.
+	current, ok, err := r.find(ctx, state)
+	if err == nil && !ok {
+		err = fmt.Errorf("entity %s is not in the entity registry", state.EntityID.ValueString())
+	}
+	if err != nil {
+		resp.Diagnostics.AddError("Reading entity settings", client.ErrorDetail(err))
+		return
+	}
+	entityID := current.EntityID
 	from := state
 	if plan.needsRegistryFlags(state) {
-		entry, ok, err := r.entities.Get(ctx, entityID)
-		if err == nil && !ok {
-			err = fmt.Errorf("entity %s is not in the entity registry", entityID)
-		}
-		if err != nil {
-			resp.Diagnostics.AddError("Reading entity settings", client.ErrorDetail(err))
-			return
-		}
-		from = plan.withRegistryFlags(state, entry)
+		from = plan.withRegistryFlags(state, current)
 	}
 	fields, diags := plan.changes(ctx, from)
 	resp.Diagnostics.Append(diags...)
@@ -341,9 +342,12 @@ func (r *entitySettingsResource) Delete(ctx context.Context, req resource.Delete
 	}
 	entityID := entry.EntityID
 	_, err = r.entities.Update(ctx, entityID, fields)
-	// An entity that is gone has nothing left to reset.
+	// An entity that is gone has nothing left to reset. It is gone only if its registry ID is: a
+	// rename since the lookup is not.
+	current := state
+	current.EntityID = types.StringValue(entityID)
 	err = client.IgnoreGone(ctx, err, func(ctx context.Context) (bool, error) {
-		_, ok, err := r.entities.Get(ctx, entityID)
+		_, ok, err := r.find(ctx, current)
 		return ok, err
 	})
 	if err != nil {

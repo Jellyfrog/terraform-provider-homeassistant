@@ -40,6 +40,33 @@ func moonEntity(t *testing.T) string {
 	return entityID
 }
 
+// templateSensor creates a template sensor named name and returns its entity ID once it is in the
+// entity registry.
+func templateSensor(t *testing.T, name string) string {
+	t.Helper()
+	c := haClient(t)
+	ctx := context.Background()
+	entryID, err := client.NewConfigFlows(c.REST).Run(ctx, "template", "", []client.FlowStep{
+		{StepID: "user", Data: map[string]any{"next_step_id": "sensor"}},
+		{StepID: "sensor", Data: map[string]any{"name": name, "state": "{{ 1 }}"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = client.NewConfigEntries(c.WS, c.REST).Delete(context.Background(), entryID) })
+
+	entities := client.Entities(c.WS)
+	var entityID string
+	acctest.Eventually(t, 30*time.Second, "the template sensor in the entity registry", func() (bool, error) {
+		list, err := entities.List(ctx)
+		if i := slices.IndexFunc(list, func(e client.EntityEntry) bool { return e.Platform == "template" && deref(e.OriginalName) == name }); i >= 0 {
+			entityID = list[i].EntityID
+		}
+		return entityID != "", err
+	})
+	return entityID
+}
+
 // checkEntityEntry runs check on the registry entry of entityID, which must exist.
 func checkEntityEntry(t *testing.T, entityID string, check func(client.EntityEntry) error) resource.TestCheckFunc {
 	return func(*terraform.State) error {
@@ -235,8 +262,9 @@ func TestAccEntitySettings_Rename(t *testing.T) {
 	const addr = "homeassistant_entity_settings.moon"
 	entityID := moonEntity(t)
 	renamed, final := "sensor.acc_moon_renamed", "sensor.acc_moon_final"
-	// An entity that holds an entity ID a rename cannot take.
+	// Entity IDs a rename cannot take: another sensor's, and one in another domain.
 	ctx := context.Background()
+	takenSensor := templateSensor(t, "Acc Taken")
 	taken, err := inputBooleans(t).Create(ctx, map[string]any{"name": "Acc Taken"})
 	if err != nil {
 		t.Fatal(err)
@@ -318,9 +346,14 @@ func TestAccEntitySettings_Rename(t *testing.T) {
 				),
 			},
 			{
-				// Another entity has the entity ID: HA's error, and the hint to replace instead.
+				// Another sensor has the entity ID: HA's error, and the hint to replace instead.
+				Config:      entitySettingsConfig(takenSensor, settings),
+				ExpectError: regexp.MustCompile(`(?s)already\s+registered.*sensor\.acc_taken.*tofu\s+apply\s+-replace`),
+			},
+			{
+				// An entity ID in another domain: HA rejects the rename, with the same hint.
 				Config:      entitySettingsConfig("input_boolean.acc_taken", settings),
-				ExpectError: regexp.MustCompile(`(?s)input_boolean\.acc_taken.*tofu\s+apply\s+-replace`),
+				ExpectError: regexp.MustCompile(`(?s)input_boolean\.acc_taken.*another\s+domain.*tofu\s+apply\s+-replace`),
 			},
 			{
 				// The failed rename left the state alone.
