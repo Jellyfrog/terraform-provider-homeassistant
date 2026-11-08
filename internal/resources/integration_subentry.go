@@ -155,7 +155,7 @@ func subentryStepsChanged(ctx context.Context, req planmodifier.DynamicRequest, 
 // does not know the steps: in state after an import or after both were removed from the
 // configuration, in a plan when both are left out. The steps cannot be read back, so the first
 // ones written are recorded, not applied, and removing them only forgets them. Either attribute
-// alone is enough to know them (ADR-0021).
+// alone is enough to know them (ADR-0028).
 func noSteps(steps, sensitive dyntype.Value) bool {
 	return nullSteps(steps) && nullSteps(sensitive)
 }
