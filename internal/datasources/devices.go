@@ -307,7 +307,7 @@ func (d *deviceDataSource) Schema(_ context.Context, _ datasource.SchemaRequest,
 			"device is renamed. Set exactly one of `device_id`, `name` and `identifier`.",
 		ElementType: types.StringType,
 		Optional:    true,
-		Validators:  []validator.List{listvalidator.SizeBetween(2, 2)},
+		Validators:  []validator.List{listvalidator.SizeBetween(2, 2), listvalidator.NoNullValues()},
 	}
 	resp.Schema = schema.Schema{
 		Description: "Reads one device (`config/device_registry/list`), by ID, by name, or by " +
