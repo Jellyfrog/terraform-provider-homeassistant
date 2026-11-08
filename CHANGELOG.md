@@ -83,8 +83,10 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   fields on the old entity and set them on the new one. Now the plan shows an in-place rename,
   and the apply fails with Home Assistant's "Entity with this ID is already registered" and a
   hint. Nothing changes in Home Assistant, and the state still points at the old entity. To
-  switch entities, run `tofu apply -replace=<address>`. A change to an entity ID that no entity
-  has used to time out. Now it renames the entity.
+  switch entities, run `tofu apply -replace=<address>`. The same goes for an entity ID in another
+  domain, which 1.0.0 also replaced: Home Assistant doesn't rename across domains, so the apply
+  fails with its error and the hint. A change to an entity ID that no entity has used to time
+  out. Now it renames the entity.
 
 ## 1.0.0
 

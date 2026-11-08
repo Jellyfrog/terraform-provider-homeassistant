@@ -368,3 +368,41 @@ func TestEntitySettingsUpdateRenameToTakenEntityID(t *testing.T) {
 		t.Errorf("entity_id in state = %v, want the prior sensor.moon_phase", got.EntityID)
 	}
 }
+
+// deleteEntitySettings runs Delete on state and returns the diagnostics.
+func deleteEntitySettings(t *testing.T, f *fakeEntityRegistry, state entitySettingsModel) diag.Diagnostics {
+	t.Helper()
+	r := &entitySettingsResource{entities: client.Entities(f)}
+	resp := resource.DeleteResponse{}
+	r.Delete(t.Context(), resource.DeleteRequest{State: stateOf(t, r, state)}, &resp)
+	return resp.Diagnostics
+}
+
+// A rename since the last refresh (`-refresh=false`, or in the UI between plan and apply) leaves a
+// stale entity ID in state: Delete still resets the entity, found by its registry ID.
+func TestEntitySettingsDeleteAfterRename(t *testing.T) {
+	f := &fakeEntityRegistry{entries: map[string]client.EntityEntry{
+		"sensor.renamed": {ID: "abc", EntityID: "sensor.renamed", Platform: "moon"},
+	}}
+	state := entitySettingsState("abc", "sensor.old")
+	state.Name = types.StringValue("Moon")
+
+	checkDiags(t, deleteEntitySettings(t, f, state), "")
+	if got := f.updateParams["entity_id"]; got != "sensor.renamed" {
+		t.Errorf("update entity_id = %v, want the current sensor.renamed; params %v", got, f.updateParams)
+	}
+	if v, ok := f.updateParams["name"]; !ok || v != nil {
+		t.Errorf("update name = %v (present %v), want reset to null", v, ok)
+	}
+}
+
+func TestEntitySettingsDeleteGone(t *testing.T) {
+	f := &fakeEntityRegistry{entries: map[string]client.EntityEntry{}}
+	state := entitySettingsState("abc", "sensor.old")
+	state.Name = types.StringValue("Moon")
+
+	checkDiags(t, deleteEntitySettings(t, f, state), "")
+	if f.updateParams != nil {
+		t.Errorf("update params = %v, want no update for a gone entity", f.updateParams)
+	}
+}

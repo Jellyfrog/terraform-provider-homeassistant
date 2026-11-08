@@ -62,7 +62,7 @@ moved {
 
 ### Required
 
-- `entity_id` (String) Entity ID, e.g. `light.bedroom_ceiling`. Create waits for the entity to appear in the registry. Changing it afterwards renames the entity; destroying the resource does not rename it back. To manage another entity instead, replace the resource with `tofu apply -replace`.
+- `entity_id` (String) Entity ID, e.g. `light.bedroom_ceiling`. Create waits for the entity to appear in the registry. Changing it afterwards renames the entity, within its domain; destroying the resource does not rename it back. To manage another entity instead, or one in another domain, replace the resource with `tofu apply -replace`.
 
 ### Optional
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -343,32 +342,10 @@ func TestAccEntitySettings_Rename(t *testing.T) {
 	})
 }
 
-// State written by v1.0.0, before the registry ID (ADR-0025), plans empty and gets the ID.
-func TestAccEntitySettings_UpgradeFromV1(t *testing.T) {
-	const addr = "homeassistant_entity_settings.moon"
-	entityID := moonEntity(t)
-	settings := `
+// State written by the release, from 1.0.0 on without the registry ID (ADR-0025), plans empty
+// and gets the ID.
+func TestAccEntitySettings_upgrade(t *testing.T) {
+	acctest.UpgradeTest(t, entitySettingsConfig(moonEntity(t), `
   name = "Acc Moon Phase"
-`
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() { acctest.PreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				ExternalProviders: map[string]resource.ExternalProvider{
-					"homeassistant": {Source: "toelke/homeassistant", VersionConstraint: "1.0.0"},
-				},
-				Config: strings.Replace(entitySettingsConfig(entityID, settings),
-					`source = "toelke/homeassistant"`, `source  = "toelke/homeassistant"
-      version = "1.0.0"`, 1),
-			},
-			{
-				ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
-				Config:                   entitySettingsConfig(entityID, settings),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
-				},
-				Check: resource.TestCheckResourceAttrSet(addr, "id"),
-			},
-		},
-	})
+`), resource.TestCheckResourceAttrSet("homeassistant_entity_settings.moon", "id"))
 }

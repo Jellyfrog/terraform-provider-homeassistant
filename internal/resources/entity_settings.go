@@ -66,9 +66,10 @@ func (r *entitySettingsResource) Schema(ctx context.Context, _ resource.SchemaRe
 			"id": computedString("Registry ID of the entity. A rename does not change it."),
 			"entity_id": schema.StringAttribute{
 				Description: "Entity ID, e.g. `light.bedroom_ceiling`. Create waits for the " +
-					"entity to appear in the registry. Changing it afterwards renames the entity; " +
-					"destroying the resource does not rename it back. To manage another entity " +
-					"instead, replace the resource with `tofu apply -replace`.",
+					"entity to appear in the registry. Changing it afterwards renames the entity, " +
+					"within its domain; destroying the resource does not rename it back. To manage " +
+					"another entity instead, or one in another domain, replace the resource with " +
+					"`tofu apply -replace`.",
 				Required: true,
 			},
 			"name": schema.StringAttribute{
@@ -299,9 +300,10 @@ func (r *entitySettingsResource) Update(ctx context.Context, req resource.Update
 		if err != nil {
 			detail := client.ErrorDetail(err)
 			if newEntityID != entityID {
-				detail += fmt.Sprintf("\n\nChanging `entity_id` renames %s to %s. If %s is another "+
-					"entity that this resource should manage instead, replace the resource: "+
-					"`tofu apply -replace=<address>`.", entityID, newEntityID, newEntityID)
+				detail += fmt.Sprintf("\n\nChanging `entity_id` renames %s to %s, and an entity "+
+					"cannot move to another domain. To manage another entity instead, or one in "+
+					"another domain, replace the resource: `tofu apply -replace=<address>`.",
+					entityID, newEntityID)
 			}
 			resp.Diagnostics.AddError("Updating entity settings", detail)
 			// The update is a single command, so nothing changed: keep the prior state rather
@@ -326,9 +328,19 @@ func (r *entitySettingsResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	// The entity keeps its entity ID: other configuration may refer to it (ADR-0025).
-	entityID := state.EntityID.ValueString()
-	_, err := r.entities.Update(ctx, entityID, fields)
+	// The entity keeps its entity ID: other configuration may refer to it (ADR-0025). It is found by
+	// its registry ID, because the entity ID in state is stale after a rename since the last
+	// refresh (`-refresh=false`, or in the UI between plan and apply).
+	entry, ok, err := r.find(ctx, state)
+	if err != nil {
+		resp.Diagnostics.AddError("Resetting entity settings", client.ErrorDetail(err))
+		return
+	}
+	if !ok {
+		return // An entity that is gone has nothing left to reset.
+	}
+	entityID := entry.EntityID
+	_, err = r.entities.Update(ctx, entityID, fields)
 	// An entity that is gone has nothing left to reset.
 	err = client.IgnoreGone(ctx, err, func(ctx context.Context) (bool, error) {
 		_, ok, err := r.entities.Get(ctx, entityID)
