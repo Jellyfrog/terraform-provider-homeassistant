@@ -70,8 +70,8 @@ resource "homeassistant_integration" "answer" {
 | Argument | Type | |
 |---|---|---|
 | `domain` | string | required, forces replacement |
-| `steps` | object: `step_id` → object of fields (dynamic) | required, at least one step; forces replacement |
-| `sensitive_steps` | same shape as `steps`, sensitive | optional; forces replacement |
+| `steps` | object: `step_id` → object of fields (dynamic) | optional, but a create needs a step here or in `sensitive_steps`; at least one step if set; forces replacement unless no step before or after (see **Import**, ADR-0028) |
+| `sensitive_steps` | same shape as `steps`, sensitive | optional; forces replacement, as `steps` |
 
 The steps are two dynamic objects keyed by `step_id` (ADR-0021, which supersedes ADR-0014's
 `step` blocks). The driver matches steps by `step_id`, so order carries no meaning, and a
@@ -88,15 +88,28 @@ own. Template and group helpers start with such a menu.
 | `title`, `state`, `disabled_by` | from `config_entries/get` |
 
 - **Create:** run the config-flow driver, then read the new entry for the computed attributes.
+  A plan that creates the entry without a step, in neither `steps` nor `sensitive_steps` (null
+  and `{}` hold none), fails with "Missing steps". OpenTofu plans a
+  replacement as a create too, so this catches a changed `domain` or `-replace` of an imported
+  entry before the old one is deleted.
 - **Read:** `config_entries/get` filtered by `domain`, matched on `entry_id`. If gone → remove
   from state. Inputs are never compared.
 - **Delete:** `DELETE /api/config/config_entries/entry/<id>`. An entry that is already gone is
   not an error. If HA answers `require_restart: true`, the delete succeeds with a warning that HA
   needs a restart to finish removing the integration.
 - **Import:** by `entry_id`, read across all domains. The steps cannot be recovered, so after
-  import they are null and the user writes them. The next plan is an in-place update that only
-  records them in state; nothing is sent to HA. After that, changing them forces replacement as
-  usual. (A null `steps` in state marks the import, since `steps` is required otherwise.)
+  import they are null. `tofu plan -generate-config-out` writes `steps = null`, and that plans no
+  changes: an imported entry needs no steps until it is replaced. When the user writes them, the
+  next plan is an in-place update that only records them in state; nothing is sent to HA. After
+  that, changing them forces replacement as usual, and removing them is an in-place update that
+  forgets them. Both count together: the provider does not know the steps when neither `steps`
+  nor `sensitive_steps` holds a step, and a change replaces the entry only if both the prior and
+  the planned inputs hold one, e.g. secrets written after an import are recorded too.
+  HA returns them nowhere (checked in 2026.5 and 2026.10): `config_entries/get` and `get_single`
+  return metadata only; diagnostics exist only for some integrations, in their own shape, with
+  secrets redacted; an options form shows the options, not the data; a reconfigure form exists
+  only for some integrations, not always under the `step_id` of the config flow, and MQTT's shows
+  a placeholder instead of the password.
 
 ## `homeassistant_integration_options`
 
@@ -263,7 +276,7 @@ flow ends with the abort `reconfigure_successful`.
   subentry needs steps only to be replaced. Steps written later are only recorded, without a
   reconfigure flow; removing them again only forgets them. `steps` and `sensitive_steps` both
   null in state mean the provider does not know the steps; either one alone is enough to know
-  them (ADR-0021).
+  them (ADR-0028).
 - **Update:** changed `steps` or `sensitive_steps` run the subentry's **reconfigure flow** if
   `supports_reconfigure` is true in state. It changes the subentry's data in place: the
   `subentry_id`, and with it the subentry's devices and entities, stay. Types without a reconfigure
