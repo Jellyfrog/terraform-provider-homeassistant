@@ -81,6 +81,14 @@ jobs:
             echo "title=$(cat "$RUNNER_TEMP/pr/title")"
             echo "body=$(base64 -w0 "$RUNNER_TEMP/pr/body")"
           } >> "$GITHUB_OUTPUT"
+      # setup-go installs the go.mod `toolchain` and sets GOTOOLCHAIN=local, so a bumped toolchain
+      # needs installing again; otherwise the checks below run on the vulnerable one.
+      - name: install the bumped toolchain
+        if: steps.changed.outputs.bumped == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
       - name: build and unit tests
         if: steps.changed.outputs.bumped == 'true'
         run: |
