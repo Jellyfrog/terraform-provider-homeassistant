@@ -100,3 +100,20 @@ func TestEntityRegistryFind(t *testing.T) {
 		})
 	}
 }
+
+// TestEntityRegistryListNumericUniqueID checks that a numeric unique ID, which HA keeps for
+// integrations that reported one, is read as a string instead of failing the whole list.
+func TestEntityRegistryListNumericUniqueID(t *testing.T) {
+	entities := Entities(fakeWS{"config/entity_registry/list": fixed(`[
+		{"id": "abc", "entity_id": "sensor.legacy", "platform": "legacy", "unique_id": 1234},
+		{"id": "def", "entity_id": "sensor.moon_phase", "platform": "moon", "unique_id": "phase"}
+	]`)})
+
+	got, err := entities.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].UniqueID != "1234" || got[1].UniqueID != "phase" {
+		t.Errorf("List = %+v", got)
+	}
+}

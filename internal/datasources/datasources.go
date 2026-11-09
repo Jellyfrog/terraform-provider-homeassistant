@@ -4,6 +4,7 @@ package datasources
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -16,6 +17,30 @@ import (
 )
 
 var entityIDPath = path.Root("entity_id")
+
+// filterSorted returns the items that keep accepts, sorted by key. The filtering data sources
+// list their matches this way.
+func filterSorted[T any](items []T, keep func(T) bool, key func(T) string) []T {
+	var out []T
+	for _, item := range items {
+		if keep(item) {
+			out = append(out, item)
+		}
+	}
+	slices.SortFunc(out, func(a, b T) int { return strings.Compare(key(a), key(b)) })
+	return out
+}
+
+// ptrMatches reports whether got equals want, or want is nil: an unset filter matches anything,
+// and a set one never matches a null value.
+func ptrMatches(want, got *string) bool {
+	return want == nil || (got != nil && *got == *want)
+}
+
+// inDomain reports whether entityID is in domain, the part of an entity ID before the dot.
+func inDomain(entityID, domain string) bool {
+	return strings.HasPrefix(entityID, domain+".")
+}
 
 // restClient returns the REST client from the provider data, or nil before the provider is
 // configured or on error.
