@@ -25,10 +25,20 @@ type fakeUsers struct {
 	fail      map[string]string
 	calls     []string
 	nextID    int
+	// cancel, if set, is called when the command cancelOn runs, which then fails like a cancelled
+	// command. Like the real client, a command on a cancelled context fails.
+	cancelOn string
+	cancel   context.CancelFunc
 }
 
-func (f *fakeUsers) Command(_ context.Context, typ string, params map[string]any, result any) error {
+func (f *fakeUsers) Command(ctx context.Context, typ string, params map[string]any, result any) error {
 	f.calls = append(f.calls, typ)
+	if typ == f.cancelOn {
+		f.cancel()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if code, ok := f.fail[typ]; ok {
 		return &client.WSError{Code: code, Message: typ + " failed"}
 	}
@@ -280,7 +290,12 @@ func TestUserUpdateLogin(t *testing.T) {
 			want.ID = created.ID
 			got, resp := updateUser(t, f, created, want)
 			checkDiags(t, resp.Diagnostics, "")
-			if !slices.Equal(f.calls, []string{"config/auth/update", tc.wantCall}) {
+			wantCalls := []string{"config/auth/update", tc.wantCall}
+			if tc.name == "add" || tc.name == "remove" {
+				// Adding or removing a login checks the login in Home Assistant first.
+				wantCalls = []string{"config/auth/update", "config/auth/list", tc.wantCall}
+			}
+			if !slices.Equal(f.calls, wantCalls) {
 				t.Errorf("calls = %v", f.calls)
 			}
 			if fmt.Sprint(f.passwords) != fmt.Sprint(tc.wantPasswords) {
@@ -480,4 +495,55 @@ func TestUserSwitchToWriteOnlyPassword(t *testing.T) {
 
 func TestUserModifyPlanAcceptsWriteOnlyPassword(t *testing.T) {
 	checkDiags(t, modifyUserPlan(t, nil, withWO(jane(), "wo-secret", 1)).Diagnostics, "")
+}
+
+func TestUserCreateUndoneWhenCancelled(t *testing.T) {
+	for _, step := range []string{"config/auth/update", "config/auth_provider/homeassistant/create"} {
+		t.Run(step, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			f := newFakeUsers()
+			f.cancelOn, f.cancel = step, cancel
+			r := userRes(f)
+			plan, config := userRequest(t, r, jane()) // jane is inactive, so create also updates
+			resp := resource.CreateResponse{State: stateOf(t, r, userModel{})}
+			r.Create(ctx, resource.CreateRequest{Plan: plan, Config: config}, &resp)
+			checkDiags(t, resp.Diagnostics, "deleted again")
+			if len(f.users) != 0 {
+				t.Errorf("users left behind after Ctrl-C: %+v", f.users)
+			}
+		})
+	}
+}
+
+func TestUserUpdateRejectsLoginChangedOutside(t *testing.T) {
+	noLogin := jane()
+	noLogin.Username, noLogin.Password = types.StringNull(), types.StringNull()
+
+	t.Run("added", func(t *testing.T) {
+		// Planned without a login; one was added in Home Assistant since.
+		f := newFakeUsers()
+		created, _ := createUser(t, f, noLogin)
+		f.users[0].Username = ptr("jane-elsewhere")
+		m := jane()
+		m.ID = created.ID
+		_, resp := updateUser(t, f, created, m)
+		checkDiags(t, resp.Diagnostics, `is "jane-elsewhere" in Home Assistant, but the plan expected none`)
+		if slices.Contains(f.calls, "config/auth_provider/homeassistant/create") {
+			t.Error("a second login was created")
+		}
+	})
+	t.Run("renamed", func(t *testing.T) {
+		// Planned to delete the login "jane", which was renamed and given to someone else since.
+		f := newFakeUsers()
+		created, _ := createUser(t, f, jane())
+		f.users[0].Username = ptr("janet")
+		m := noLogin
+		m.ID = created.ID
+		_, resp := updateUser(t, f, created, m)
+		checkDiags(t, resp.Diagnostics, `is "janet" in Home Assistant, but the plan expected "jane"`)
+		if slices.Contains(f.calls, "config/auth_provider/homeassistant/delete") {
+			t.Error("a login was deleted")
+		}
+	})
 }

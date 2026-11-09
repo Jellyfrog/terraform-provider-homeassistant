@@ -41,8 +41,12 @@ Commands: `config/auth/list|create|update|delete` (key `user_id`), and for the l
     is set and `password_wo_version` changed. The provider cannot see a change of `password_wo`
     itself. With neither set, the password stays as it is.
 
-  The state is saved after each step, so a failed step is retried by the next apply and the
-  steps before it are not.
+  Before adding or removing a login, the provider checks that the user's login in HA is still the
+  one the plan expected (none, or the old username), and fails otherwise: a login added outside
+  OpenTofu would get a second one before 2026.11, and a username that now belongs to another user
+  would delete that user's login. The settings update is sent on every apply; the login steps
+  are saved to state one by one, so a failed one is retried by the next apply and the ones before
+  it are not.
 - **Delete:** `config/auth/delete`, which also deletes the login. A user that is already gone is
   not an error. HA unlinks it from its person.
 - **Plan:** creating a login (on a new user, or one without a login) without `password` or

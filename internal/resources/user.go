@@ -398,7 +398,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	oldName, newName := state.Username, plan.Username
 	switch {
 	case oldName.IsNull() && !newName.IsNull():
-		if missingPassword(newName, password, &resp.Diagnostics) {
+		if missingPassword(newName, password, &resp.Diagnostics) || !r.loginIs(ctx, id, nil, &resp.Diagnostics) {
 			return
 		}
 		if err := r.users.CreateCredentials(ctx, id, newName.ValueString(), password.ValueString()); err != nil {
@@ -406,6 +406,9 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 			return
 		}
 	case !oldName.IsNull() && newName.IsNull():
+		if !r.loginIs(ctx, id, oldName.ValueStringPointer(), &resp.Diagnostics) {
+			return
+		}
 		if err := r.users.DeleteCredentials(ctx, oldName.ValueString()); err != nil {
 			resp.Diagnostics.AddError("Deleting login", client.ErrorDetail(err))
 			return
@@ -427,6 +430,36 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+}
+
+// loginIs reports whether the user with the given ID has the login want (nil for none) in Home
+// Assistant, and adds an error otherwise. A plan made before the login changed outside OpenTofu
+// must not attach a second login (Home Assistant before 2026.11 allows it), nor delete a login by a
+// username that now belongs to another user.
+func (r *userResource) loginIs(ctx context.Context, id string, want *string, diags *diag.Diagnostics) bool {
+	u, ok, err := r.users.Get(ctx, id)
+	switch {
+	case err != nil:
+		diags.AddError("Reading user", client.ErrorDetail(err))
+		return false
+	case !ok:
+		diags.AddError("User is gone", fmt.Sprintf("User %s was deleted outside OpenTofu. Plan again.", id))
+		return false
+	case (u.Username == nil) != (want == nil) || (want != nil && *u.Username != *want):
+		diags.AddAttributeError(path.Root("username"), "Login changed outside OpenTofu",
+			fmt.Sprintf("The login of user %s is %s in Home Assistant, but the plan expected %s. Plan again.",
+				id, loginName(u.Username), loginName(want)))
+		return false
+	}
+	return true
+}
+
+// loginName describes a login for a message.
+func loginName(username *string) string {
+	if username == nil {
+		return "none"
+	}
+	return fmt.Sprintf("%q", *username)
 }
 
 // passwordChanged reports whether an update sets the password of an existing login: `password`
