@@ -143,8 +143,8 @@ migration. A fresh instance has no `lovelace` entry until the migration runs.
 
 A Lovelace resource: a URL the frontend loads on every dashboard, such as a custom card's
 JavaScript. Only while Lovelace keeps its resources in storage (the default). In YAML mode
-`lovelace/resources` lists the YAML resources, but `create`, `update` and `delete` don't exist, so
-applying fails.
+`lovelace/resources` lists the YAML resources, which have no ID, and `create`, `update` and
+`delete` don't exist: Read, Create, Update and Delete fail, and the resource stays in state.
 
 | Argument | Type | Notes |
 |---|---|---|
@@ -157,8 +157,8 @@ applying fails.
 
 | Operation | Command |
 |---|---|
-| Create | `lovelace/resources` (fails if a resource has exactly the same `url`, since HA would load it twice; the error names its ID for import, ADR-0029) → `lovelace/resources/create` (`res_type`, `url`) |
-| Read | `lovelace/resources` (find by `id`; missing → remove from state) |
+| Create | `lovelace/resources` (fails if a resource has exactly the same `url`, since HA would load it twice; the error names its ID for import, ADR-0029; the check and the create hold a provider-wide lock) → `lovelace/resources/create` (`res_type`, `url`) |
+| Read | `lovelace/resources` (find by `id`; missing → `lovelace/info`: `resource_mode` `storage` → remove from state, else error) |
 | Update | `lovelace/resources` (fails if another resource has the new `url`, as for Create) → `lovelace/resources/update` (`resource_id`, `res_type`, `url`) |
-| Delete | `lovelace/resources/delete` (`resource_id`; a resource that is gone counts as deleted) |
+| Delete | `lovelace/resources/delete` (`resource_id`; a resource that is gone counts as deleted, `unknown_command` does not) |
 | Import | by `id` or by `url`; a `url` that several resources share is an error (import by `id`) |

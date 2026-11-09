@@ -1,5 +1,7 @@
 package client
 
+import "context"
+
 // LovelaceResource is a Lovelace resource: a URL that the frontend loads on every dashboard, such
 // as the JavaScript of a custom card.
 type LovelaceResource struct {
@@ -21,4 +23,15 @@ func LovelaceResources(ws WSCommander) Registry[LovelaceResource] {
 		key:    "resource_id",
 		idOf:   func(r LovelaceResource) string { return r.ID },
 	}
+}
+
+// LovelaceResourceMode returns where Lovelace keeps its resources (`lovelace/info`): `storage`, or
+// `yaml`, where `lovelace/resources` lists the YAML resources, which have no ID, and the create,
+// update and delete commands don't exist.
+func LovelaceResourceMode(ctx context.Context, ws WSCommander) (string, error) {
+	var info struct {
+		ResourceMode string `json:"resource_mode"`
+	}
+	err := ws.Command(ctx, "lovelace/info", nil, &info)
+	return info.ResourceMode, err
 }

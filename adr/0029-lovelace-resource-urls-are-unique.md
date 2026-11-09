@@ -40,5 +40,6 @@ ID.
   `/hacsfiles/button-card/button-card.js?hacstag=…`, and the frontend loads both. Import HACS's
   resource by its URL instead of declaring a new one.
 - A create or update costs one extra `lovelace/resources` call.
-- Two resources created concurrently with the same URL (two Tofu runs, or Tofu and the UI) can
-  still both be created; the check is not atomic.
+- The provider holds a lock from the check until the create or update returns, so two resources
+  with the same URL in one run cannot both pass. Two Tofu runs, or Tofu and the UI at the same
+  time, still can: Home Assistant offers no atomic check.

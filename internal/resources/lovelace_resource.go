@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -29,7 +30,16 @@ func NewLovelaceResource() resource.Resource {
 }
 
 type lovelaceResourceResource struct {
+	ws        client.WSCommander
 	resources client.Registry[client.LovelaceResource]
+}
+
+// lovelaceResourceWrites serializes the URL check and the create or update that follows it, so
+// two resources with the same URL in one run cannot both pass the check (ADR-0029).
+var lovelaceResourceWrites sync.Mutex
+
+func newLovelaceResourceResource(ws client.WSCommander) *lovelaceResourceResource {
+	return &lovelaceResourceResource{ws: ws, resources: client.LovelaceResources(ws)}
 }
 
 type lovelaceResourceModel struct {
@@ -88,7 +98,7 @@ func (r *lovelaceResourceResource) Schema(_ context.Context, _ resource.SchemaRe
 
 func (r *lovelaceResourceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if c := haClient(req, resp); c != nil {
-		r.resources = client.LovelaceResources(c.WS)
+		*r = *newLovelaceResourceResource(c.WS)
 	}
 }
 
@@ -99,6 +109,8 @@ func (r *lovelaceResourceResource) Create(ctx context.Context, req resource.Crea
 		return
 	}
 
+	lovelaceResourceWrites.Lock()
+	defer lovelaceResourceWrites.Unlock()
 	if !r.urlFree(ctx, plan.URL.ValueString(), "", &resp.Diagnostics) {
 		return
 	}
@@ -142,6 +154,18 @@ func (r *lovelaceResourceResource) Read(ctx context.Context, req resource.ReadRe
 		return
 	}
 	if !ok {
+		// In YAML mode the list holds only the YAML resources: the stored one still exists.
+		mode, err := client.LovelaceResourceMode(ctx, r.ws)
+		if err != nil {
+			resp.Diagnostics.AddError("Reading Lovelace resource mode", client.ErrorDetail(err))
+			return
+		}
+		if mode != "storage" {
+			resp.Diagnostics.AddError("Lovelace resources are in YAML mode",
+				fmt.Sprintf("Home Assistant keeps its Lovelace resources in %s mode, so the provider cannot "+
+					"manage resource %s. Switch `lovelace: resource_mode` back to storage.", mode, state.ID.ValueString()))
+			return
+		}
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -155,6 +179,8 @@ func (r *lovelaceResourceResource) Update(ctx context.Context, req resource.Upda
 		return
 	}
 
+	lovelaceResourceWrites.Lock()
+	defer lovelaceResourceWrites.Unlock()
 	if !r.urlFree(ctx, plan.URL.ValueString(), plan.ID.ValueString(), &resp.Diagnostics) {
 		return
 	}

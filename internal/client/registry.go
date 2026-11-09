@@ -78,10 +78,12 @@ func (r Registry[T]) Delete(ctx context.Context, id string) error {
 
 // IgnoreGone returns nil if err is an error from HA and exists then reports that the object the
 // command was about is gone, and err otherwise. HA reports a missing ID as a generic error, so
-// only asking again tells a missing object apart from a real failure.
+// only asking again tells a missing object apart from a real failure. An unknown command is never
+// a missing object: the command does not exist on this instance (e.g. Lovelace resources in YAML
+// mode).
 func IgnoreGone(ctx context.Context, err error, exists func(context.Context) (bool, error)) error {
 	var wsErr *WSError
-	if errors.As(err, &wsErr) {
+	if errors.As(err, &wsErr) && wsErr.Code != "unknown_command" {
 		if ok, getErr := exists(ctx); getErr == nil && !ok {
 			return nil
 		}
