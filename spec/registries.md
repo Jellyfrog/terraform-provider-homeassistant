@@ -108,8 +108,10 @@ resource "homeassistant_entity_settings" "ceiling" {
 |---|---|---|
 | `entity_id` | string, required; selects the entity on create, renames it in place afterwards | not reset |
 | `name` | string | `null` (back to the integration's name) |
+| `use_integration_name` | bool, only `true`; conflicts with `name`. Writes `name: null`; reads `true` only if `name` is `null` (`""` is drift) (ADR-0030) | not reset |
 | `icon` | string | `null` |
 | `area_id` | string | `null` (inherits the device's area) |
+| `inherit_area` | bool, only `true`; conflicts with `area_id`. Writes `area_id: null`; reads `true` only if `area_id` is `null` (ADR-0030) | not reset |
 | `labels` | set(string) | `[]` |
 | `hidden` | bool → `hidden_by: "user"`, or `null` if it was `"user"` | `null` if `true` |
 | `disabled` | bool → `disabled_by: "user"`, or `null` if it was `"user"` | `null` if `true` |

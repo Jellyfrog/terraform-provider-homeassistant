@@ -66,13 +66,15 @@ moved {
 
 ### Optional
 
-- `area_id` (String) ID of the entity's area, e.g. `homeassistant_area.bedroom.id`. Unsetting it makes the entity inherit its device's area.
+- `area_id` (String) ID of the entity's area, e.g. `homeassistant_area.bedroom.id`. Unsetting it makes the entity inherit its device's area. To make sure the entity has no area of its own, set `inherit_area` instead.
 - `disabled` (Boolean) Whether the user disables the entity. Reads `false` when it is enabled or disabled by its integration or device. `false` enables an entity the user disabled, but leaves one disabled by its integration or device disabled.
 - `hidden` (Boolean) Whether the user hides the entity. Reads `false` when it is visible or hidden by its integration. `false` unhides an entity the user hid, but leaves one hidden by its integration hidden.
 - `icon` (String) Icon that overrides the integration's, e.g. `mdi:ceiling-light`.
+- `inherit_area` (Boolean) `true` makes sure the entity has no area of its own, so it inherits its device's area. An area set elsewhere shows as drift and is cleared. Only `true` is allowed; leave it out to not manage the area. Conflicts with `area_id` (ADR-0030).
 - `labels` (Set of String) IDs of the labels on the entity. When set, this is the complete list: labels added elsewhere are removed.
-- `name` (String) Name that overrides the integration's. Unsetting it goes back to the integration's name. Since Home Assistant 2026.11, Home Assistant shows the device name in front of it, as it does for the integration's name, unless the entity has an area of its own. Leave the device name out then (`Power`, not `Kitchen Lamp Power`).
+- `name` (String) Name that overrides the integration's. Unsetting it goes back to the integration's name. Since Home Assistant 2026.11, Home Assistant shows the device name in front of it, as it does for the integration's name, unless the entity has an area of its own. Leave the device name out then (`Power`, not `Kitchen Lamp Power`). To make sure the entity has no name of its own, set `use_integration_name` instead.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
+- `use_integration_name` (Boolean) `true` makes sure the entity has no name of its own, so Home Assistant shows the integration's name (since 2026.11, after the device name; the device's main entity shows only the device name). A name set elsewhere, including the empty name that the 2026.11 upgrade leaves when a name equals the device name, shows as drift and is cleared. Only `true` is allowed; leave it out to not manage the name. Conflicts with `name` (ADR-0030).
 
 ### Read-Only
 
