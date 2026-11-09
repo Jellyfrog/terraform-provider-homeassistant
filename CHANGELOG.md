@@ -6,6 +6,12 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
 
 ## Unreleased
 
+## 1.1.0
+
+Supports Home Assistant 2026.6 to 2026.11. No breaking changes: state from 1.0.0 upgrades without
+changes. Read the "Changed" entry for `homeassistant_entity_settings` if a configuration changes
+`entity_id`, and the Home Assistant 2026.11 entries before upgrading Home Assistant.
+
 - `homeassistant_entity_settings` gets `use_integration_name = true` and `inherit_area = true`
   (ADR-0030). They make sure the entity has no name or no area of its own, even one set
   elsewhere: a name or area read back from Home Assistant shows as drift, and applying clears it.
