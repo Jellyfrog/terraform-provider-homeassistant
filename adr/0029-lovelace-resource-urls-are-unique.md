@@ -35,12 +35,14 @@ ID.
 ## Consequences
 
 - Applying a configuration never adds a second resource with a URL that one already has, except
-  when separate runs race to create the same new URL (see below).
+  when another writer creates the same new URL between the check and the create (see below).
 - The comparison is exact. HACS registers its resources with a `?hacstag=…` query, so
   `/hacsfiles/button-card/button-card.js` in the configuration does not match HACS's
   `/hacsfiles/button-card/button-card.js?hacstag=…`, and the frontend loads both. Import HACS's
   resource by its URL instead of declaring a new one.
 - A create or update costs one extra `lovelace/resources` call.
 - The provider holds a lock from the check until the create or update returns, so two resources
-  with the same URL in one run cannot both pass. Two Tofu runs, or Tofu and the UI at the same
-  time, still can: Home Assistant offers no atomic check.
+  with the same URL under one provider configuration cannot both pass. The lock lives in the
+  provider process, and Tofu starts one per provider configuration, so two Tofu runs, two provider
+  aliases for the same instance, or Tofu and the UI at the same time still can: Home Assistant
+  offers no atomic check. Keep a resource's URL under one provider configuration.
