@@ -183,8 +183,11 @@ def main() -> int:
         return " ".join(d + ("" if d not in t["missing"] else "*") for d in t["deps"])
 
     rows = [(n, t) for n, t in tickets.items() if not ("--open" in args and t["state"] == "done")]
-    width = min(max(len(t["title"]) for _, t in rows), 46)
-    print(f"{'#':<9} {'TITLE':<{width}}  {'STATE':<9}  {'DEPENDS ON':<14}  NOTE")
+    if not rows:
+        print("no open tickets" if "--open" in args else "no tickets")
+    else:
+        width = min(max(len(t["title"]) for _, t in rows), 46)
+        print(f"{'#':<9} {'TITLE':<{width}}  {'STATE':<9}  {'DEPENDS ON':<14}  NOTE")
     for n, t in rows:
         if n in issues and n == next(iter(issues)):
             print("\nagent-ready GitHub issues:")
