@@ -6,6 +6,15 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
 
 ## Unreleased
 
+- New resource `homeassistant_user`: a user (`name`, `group`, `is_active`, `local_only`) with an
+  optional login: `username`, and either a sensitive `password` kept in state or, with
+  OpenTofu/Terraform 1.11 or later, a write-only `password_wo` with `password_wo_version`, which
+  never reaches the state. Changing the username or password of an existing user needs the
+  owner's token. Import by ID or username; the owner and system-generated users cannot be
+  managed (#93).
+- New resource `homeassistant_person`: a person (`name`, `user_id`, `device_trackers`,
+  `picture`) with a generated ID (ADR-0009). Persons defined in YAML cannot be managed (#93).
+
 ## 1.1.0
 
 Supports Home Assistant 2026.6 to 2026.11. No breaking changes: state from 1.0.0 upgrades without

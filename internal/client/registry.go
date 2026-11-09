@@ -2,14 +2,16 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 )
 
 // Registry is one of HA's WebSocket registries with the commands `<prefix>/create`, `/update`,
 // and `/delete`, which name an object by its ID in the field `key`, and a list command
-// (`<prefix>/list` unless list says otherwise). Floors, areas, labels, input helpers, and
-// Lovelace resources follow this shape.
+// (`<prefix>/list` unless list says otherwise). Floors, areas, labels, input helpers, Lovelace
+// resources, and users follow this shape.
 type Registry[T any] struct {
 	ws     WSCommander
 	prefix string
@@ -17,6 +19,29 @@ type Registry[T any] struct {
 	idOf   func(T) string
 	// list is the list command, if it is not `<prefix>/list`.
 	list string
+	// reply is the key that wraps the object in create and update replies, e.g. `user` for
+	// `{"user": {...}}`, or empty if the reply is the object itself.
+	reply string
+}
+
+// command runs a create or update command and decodes the object from its reply.
+func (r Registry[T]) command(ctx context.Context, typ string, params map[string]any) (T, error) {
+	var item T
+	if r.reply == "" {
+		err := r.ws.Command(ctx, typ, params, &item)
+		return item, err
+	}
+	// Only the wrapped object is decoded, so other keys in the reply do not break it.
+	var wrapped map[string]json.RawMessage
+	if err := r.ws.Command(ctx, typ, params, &wrapped); err != nil {
+		return item, err
+	}
+	raw, ok := wrapped[r.reply]
+	if !ok {
+		return item, fmt.Errorf("%s: the reply has no %q", typ, r.reply)
+	}
+	err := json.Unmarshal(raw, &item)
+	return item, err
 }
 
 // List returns every object in the registry.
@@ -52,9 +77,7 @@ func (r Registry[T]) Find(ctx context.Context, match func(T) bool) (item T, ok b
 // Create creates an object from fields and returns it as HA stored it, including the ID HA
 // assigned.
 func (r Registry[T]) Create(ctx context.Context, fields map[string]any) (T, error) {
-	var item T
-	err := r.ws.Command(ctx, r.prefix+"/create", fields, &item)
-	return item, err
+	return r.command(ctx, r.prefix+"/create", fields)
 }
 
 // Update sets fields on the object with the given ID and returns the result.
@@ -62,9 +85,7 @@ func (r Registry[T]) Update(ctx context.Context, id string, fields map[string]an
 	params := make(map[string]any, len(fields)+1)
 	maps.Copy(params, fields)
 	params[r.key] = id
-	var item T
-	err := r.ws.Command(ctx, r.prefix+"/update", params, &item)
-	return item, err
+	return r.command(ctx, r.prefix+"/update", params)
 }
 
 // Delete deletes the object with the given ID. An object that is already gone is not an error.

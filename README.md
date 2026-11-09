@@ -22,6 +22,8 @@ scenes, helpers, dashboards, and integrations.
   (`homeassistant_integration`), and its subentries by answering their subentry flows
   (`homeassistant_integration_subentry`), plus typed resources for ESPHome and MQTT
   (`homeassistant_esphome`, `homeassistant_mqtt`).
+- **Users and persons** (`homeassistant_user`, with an optional username and password, and
+  `homeassistant_person`, with its device trackers).
 - **Data sources** to look things up: entities, devices, areas, integrations, the instance config,
   and rendered templates.
 - **Provider functions** that build dashboard cards and sections, and automation triggers,
