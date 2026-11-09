@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/boolvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/toelke/terraform-provider-homeassistant/internal/client"
@@ -34,18 +36,20 @@ type entitySettingsResource struct {
 }
 
 type entitySettingsModel struct {
-	ID           types.String   `tfsdk:"id"`
-	EntityID     types.String   `tfsdk:"entity_id"`
-	Name         types.String   `tfsdk:"name"`
-	Icon         types.String   `tfsdk:"icon"`
-	AreaID       types.String   `tfsdk:"area_id"`
-	Labels       types.Set      `tfsdk:"labels"`
-	Hidden       types.Bool     `tfsdk:"hidden"`
-	Disabled     types.Bool     `tfsdk:"disabled"`
-	Platform     types.String   `tfsdk:"platform"`
-	DeviceID     types.String   `tfsdk:"device_id"`
-	OriginalName types.String   `tfsdk:"original_name"`
-	Timeouts     timeouts.Value `tfsdk:"timeouts"`
+	ID                 types.String   `tfsdk:"id"`
+	EntityID           types.String   `tfsdk:"entity_id"`
+	Name               types.String   `tfsdk:"name"`
+	UseIntegrationName types.Bool     `tfsdk:"use_integration_name"`
+	Icon               types.String   `tfsdk:"icon"`
+	AreaID             types.String   `tfsdk:"area_id"`
+	InheritArea        types.Bool     `tfsdk:"inherit_area"`
+	Labels             types.Set      `tfsdk:"labels"`
+	Hidden             types.Bool     `tfsdk:"hidden"`
+	Disabled           types.Bool     `tfsdk:"disabled"`
+	Platform           types.String   `tfsdk:"platform"`
+	DeviceID           types.String   `tfsdk:"device_id"`
+	OriginalName       types.String   `tfsdk:"original_name"`
+	Timeouts           timeouts.Value `tfsdk:"timeouts"`
 }
 
 func (r *entitySettingsResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -77,8 +81,22 @@ func (r *entitySettingsResource) Schema(ctx context.Context, _ resource.SchemaRe
 					"the integration's name. Since Home Assistant 2026.11, Home Assistant shows the " +
 					"device name in front of it, as it does for the integration's name, unless the " +
 					"entity has an area of its own. Leave the device name out then (`Power`, not " +
-					"`Kitchen Lamp Power`).",
+					"`Kitchen Lamp Power`). To make sure the entity has no name of its own, set " +
+					"`use_integration_name` instead.",
 				Optional: true,
+			},
+			"use_integration_name": schema.BoolAttribute{
+				Description: "`true` makes sure the entity has no name of its own, so Home Assistant " +
+					"shows the integration's name (since 2026.11, after the device name; the device's " +
+					"main entity shows only the device name). A name set elsewhere, including the " +
+					"empty name that the 2026.11 upgrade leaves when a name equals the device name, " +
+					"shows as drift and is cleared. Only `true` is allowed; leave it out to not manage " +
+					"the name. Conflicts with `name` (ADR-0030).",
+				Optional: true,
+				Validators: []validator.Bool{
+					onlyTrue{},
+					boolvalidator.ConflictsWith(path.MatchRoot("name")),
+				},
 			},
 			"icon": schema.StringAttribute{
 				Description: "Icon that overrides the integration's, e.g. `mdi:ceiling-light`.",
@@ -86,8 +104,20 @@ func (r *entitySettingsResource) Schema(ctx context.Context, _ resource.SchemaRe
 			},
 			"area_id": schema.StringAttribute{
 				Description: "ID of the entity's area, e.g. `homeassistant_area.bedroom.id`. " +
-					"Unsetting it makes the entity inherit its device's area.",
+					"Unsetting it makes the entity inherit its device's area. To make sure the entity " +
+					"has no area of its own, set `inherit_area` instead.",
 				Optional: true,
+			},
+			"inherit_area": schema.BoolAttribute{
+				Description: "`true` makes sure the entity has no area of its own, so it inherits its " +
+					"device's area. An area set elsewhere shows as drift and is cleared. Only `true` " +
+					"is allowed; leave it out to not manage the area. Conflicts with `area_id` " +
+					"(ADR-0030).",
+				Optional: true,
+				Validators: []validator.Bool{
+					onlyTrue{},
+					boolvalidator.ConflictsWith(path.MatchRoot("area_id")),
+				},
 			},
 			"labels": schema.SetAttribute{
 				Description: "IDs of the labels on the entity. When set, this is the complete " +
@@ -133,6 +163,8 @@ func (to entitySettingsModel) changes(ctx context.Context, from entitySettingsMo
 	fieldChange(fields, "name", to.Name, from.Name, func() any { return to.Name.ValueStringPointer() }, nil)
 	fieldChange(fields, "icon", to.Icon, from.Icon, func() any { return to.Icon.ValueStringPointer() }, nil)
 	fieldChange(fields, "area_id", to.AreaID, from.AreaID, func() any { return to.AreaID.ValueStringPointer() }, nil)
+	clearChange(fields, "name", to.UseIntegrationName, from.UseIntegrationName)
+	clearChange(fields, "area_id", to.InheritArea, from.InheritArea)
 	fieldChange(fields, "labels", to.Labels, from.Labels, func() any {
 		labels := []string{}
 		diags.Append(to.Labels.ElementsAs(ctx, &labels, false)...)
@@ -163,11 +195,17 @@ func (m *entitySettingsModel) refresh(ctx context.Context, e client.EntityEntry)
 	if !m.Name.IsNull() {
 		m.Name = types.StringPointerValue(e.Name)
 	}
+	if !m.UseIntegrationName.IsNull() {
+		m.UseIntegrationName = types.BoolValue(e.Name == nil)
+	}
 	if !m.Icon.IsNull() {
 		m.Icon = types.StringPointerValue(e.Icon)
 	}
 	if !m.AreaID.IsNull() {
 		m.AreaID = types.StringPointerValue(e.AreaID)
+	}
+	if !m.InheritArea.IsNull() {
+		m.InheritArea = types.BoolValue(e.AreaID == nil)
 	}
 	if !m.Labels.IsNull() {
 		m.Labels, diags = types.SetValueFrom(ctx, types.StringType, append([]string{}, e.Labels...))

@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -121,6 +122,28 @@ func TestEntitySettingsChanges(t *testing.T) {
 			from: managed,
 			want: map[string]any{},
 		},
+		{
+			name: "use_integration_name and inherit_area clear the name and area on create",
+			to:   entitySettingsModel{UseIntegrationName: types.BoolValue(true), InheritArea: types.BoolValue(true)},
+			want: map[string]any{"name": nil, "area_id": nil},
+		},
+		{
+			name: "a name or area set elsewhere (read back as false) is cleared again",
+			to:   entitySettingsModel{UseIntegrationName: types.BoolValue(true), InheritArea: types.BoolValue(true)},
+			from: entitySettingsModel{UseIntegrationName: types.BoolValue(false), InheritArea: types.BoolValue(true)},
+			want: map[string]any{"name": nil},
+		},
+		{
+			name: "removing use_integration_name or inherit_area writes nothing",
+			from: entitySettingsModel{UseIntegrationName: types.BoolValue(true), InheritArea: types.BoolValue(true)},
+			want: map[string]any{},
+		},
+		{
+			name: "use_integration_name replacing name clears it",
+			to:   entitySettingsModel{UseIntegrationName: types.BoolValue(true)},
+			from: entitySettingsModel{Name: types.StringValue("Moon")},
+			want: map[string]any{"name": nil},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -169,6 +192,57 @@ func TestEntitySettingsRefreshIsFieldGranular(t *testing.T) {
 	}
 	if !m.DeviceID.IsNull() {
 		t.Errorf("device_id = %v, want null", m.DeviceID)
+	}
+}
+
+func TestEntitySettingsRefreshUseIntegrationNameAndInheritArea(t *testing.T) {
+	empty, area := "", "kitchen"
+	tests := []struct {
+		name              string
+		entry             client.EntityEntry
+		wantNameCleared   bool
+		wantAreaInherited bool
+	}{
+		{"no name, no area", client.EntityEntry{}, true, true},
+		{"empty name (2026.11 migration) and an area", client.EntityEntry{Name: &empty, AreaID: &area}, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := entitySettingsModel{UseIntegrationName: types.BoolValue(true), InheritArea: types.BoolValue(true)}
+			if diags := m.refresh(context.Background(), tt.entry); diags.HasError() {
+				t.Fatal(diags)
+			}
+			if m.UseIntegrationName.ValueBool() != tt.wantNameCleared || m.InheritArea.ValueBool() != tt.wantAreaInherited {
+				t.Errorf("use_integration_name = %v, inherit_area = %v; want %v, %v",
+					m.UseIntegrationName, m.InheritArea, tt.wantNameCleared, tt.wantAreaInherited)
+			}
+		})
+	}
+
+	unmanaged := entitySettingsModel{}
+	if diags := unmanaged.refresh(context.Background(), client.EntityEntry{}); diags.HasError() {
+		t.Fatal(diags)
+	}
+	if !unmanaged.UseIntegrationName.IsNull() || !unmanaged.InheritArea.IsNull() {
+		t.Errorf("unmanaged flags were read: %+v", unmanaged)
+	}
+}
+
+func TestOnlyTrue(t *testing.T) {
+	for _, tt := range []struct {
+		value   types.Bool
+		wantErr bool
+	}{
+		{types.BoolNull(), false},
+		{types.BoolUnknown(), false},
+		{types.BoolValue(true), false},
+		{types.BoolValue(false), true},
+	} {
+		var resp validator.BoolResponse
+		onlyTrue{}.ValidateBool(context.Background(), validator.BoolRequest{ConfigValue: tt.value}, &resp)
+		if resp.Diagnostics.HasError() != tt.wantErr {
+			t.Errorf("%v: error = %v, want %v", tt.value, resp.Diagnostics, tt.wantErr)
+		}
 	}
 }
 

@@ -382,3 +382,67 @@ func TestAccEntitySettings_upgrade(t *testing.T) {
   name = "Acc Moon Phase"
 `), resource.TestCheckResourceAttrSet("homeassistant_entity_settings.moon", "id"))
 }
+
+func TestAccEntitySettings_UseIntegrationName(t *testing.T) {
+	const addr = "homeassistant_entity_settings.moon"
+	entityID := moonEntity(t)
+	cleared := checkEntityEntry(t, entityID, func(e client.EntityEntry) error {
+		if e.Name != nil || e.AreaID != nil {
+			return fmt.Errorf("name = %s, area_id = %s; want both null", deref(e.Name), deref(e.AreaID))
+		}
+		return nil
+	})
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(t) },
+		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: entitySettingsConfig(entityID, `
+  use_integration_name = false
+`),
+				ExpectError: regexp.MustCompile(`Only true is allowed`),
+			},
+			{
+				Config: entitySettingsConfig(entityID, `
+  name                 = "Acc Moon"
+  use_integration_name = true
+`),
+				ExpectError: regexp.MustCompile(`(?s)Invalid Attribute Combination`),
+			},
+			{
+				Config: entitySettingsConfig(entityID, `
+  name    = "Acc Moon"
+  area_id = homeassistant_area.sky.id
+`),
+			},
+			{
+				// Replacing name and area_id with the flags clears both.
+				Config: entitySettingsConfig(entityID, `
+  use_integration_name = true
+  inherit_area         = true
+`),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(addr, "use_integration_name", "true"),
+					resource.TestCheckResourceAttr(addr, "inherit_area", "true"),
+					cleared,
+				),
+			},
+			{
+				// The empty name the 2026.11 migration leaves is drift, and applying clears it.
+				PreConfig: func() {
+					if _, err := client.Entities(haClient(t).WS).Update(context.Background(), entityID, map[string]any{"name": ""}); err != nil {
+						t.Fatal(err)
+					}
+				},
+				Config: entitySettingsConfig(entityID, `
+  use_integration_name = true
+  inherit_area         = true
+`),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)},
+				},
+				Check: cleared,
+			},
+		},
+	})
+}

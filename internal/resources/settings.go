@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -33,6 +34,32 @@ func fieldChange(fields map[string]any, key string, to, from attr.Value, value f
 	case to.IsNull() && !from.IsNull():
 		fields[key] = reset
 	}
+}
+
+// clearChange adds the registry field key, reset to null, to fields if the attribute that clears
+// it (`use_integration_name`, `inherit_area`) is true in to but not in from (ADR-0030). from is
+// false when the registry holds a value, so a value set elsewhere is cleared again. Removing the
+// attribute writes nothing: null is the default anyway.
+func clearChange(fields map[string]any, key string, to, from types.Bool) {
+	if to.ValueBool() && !from.ValueBool() {
+		fields[key] = nil
+	}
+}
+
+// onlyTrue allows only `true` for an attribute where `false` would mean nothing the provider can
+// write, such as `use_integration_name`: leaving it out is how it is not managed.
+type onlyTrue struct{}
+
+func (onlyTrue) Description(context.Context) string { return "must be true if set" }
+
+func (v onlyTrue) MarkdownDescription(ctx context.Context) string { return v.Description(ctx) }
+
+func (onlyTrue) ValidateBool(_ context.Context, req validator.BoolRequest, resp *validator.BoolResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() || req.ConfigValue.ValueBool() {
+		return
+	}
+	resp.Diagnostics.AddAttributeError(req.Path, "Only true is allowed",
+		"Set it to true, or leave it out to not manage this setting.")
 }
 
 // flagChange adds the registry field key (`hidden_by` or `disabled_by`) to fields if the flag

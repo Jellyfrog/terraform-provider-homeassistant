@@ -6,6 +6,11 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
 
 ## Unreleased
 
+- `homeassistant_entity_settings` gets `use_integration_name = true` and `inherit_area = true`
+  (ADR-0030). They make sure the entity has no name or no area of its own, even one set
+  elsewhere: a name or area read back from Home Assistant shows as drift, and applying clears it.
+  This includes the `""` names that the 2026.11 upgrade leaves. Before, the resource could clear
+  only a name or area that it had managed itself (#97).
 - Supports Home Assistant 2026.6 to 2026.11, the six most recent releases (ADR-0003). CI tests
   2026.6.4 and 2026.11.0.
 - Home Assistant 2026.11 shows the device name in front of an entity name set by the user,
