@@ -117,10 +117,7 @@ func (f *fakeLovelace) Command(ctx context.Context, typ string, _ map[string]any
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	reply := func(v any) error {
-		b, _ := json.Marshal(v)
-		return json.Unmarshal(b, result)
-	}
+	reply := func(v any) error { return jsonReply(v, result) }
 	dash := map[string]any{"id": "my_home", "url_path": "my-home", "mode": "storage", "title": "Home", "show_in_sidebar": true}
 	switch typ {
 	case "lovelace/dashboards/create":
@@ -144,6 +141,23 @@ func (f *fakeLovelace) Command(ctx context.Context, typ string, _ map[string]any
 		return &client.WSError{Code: "config_not_found", Message: "No config found."}
 	}
 	return &client.WSError{Code: "unknown_command", Message: typ}
+}
+
+// planOf returns a plan of resource r holding the model m.
+func planOf(t *testing.T, r resource.Resource, m any) tfsdk.Plan {
+	t.Helper()
+	s := stateOf(t, r, m)
+	return tfsdk.Plan(s)
+}
+
+// jsonReply decodes v into result through JSON, as a fake WSCommander replies. A nil result
+// takes no reply.
+func jsonReply(v, result any) error {
+	if result == nil {
+		return nil
+	}
+	b, _ := json.Marshal(v)
+	return json.Unmarshal(b, result)
 }
 
 // stateOf returns m as state of r.

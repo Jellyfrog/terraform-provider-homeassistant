@@ -87,6 +87,18 @@ config `id`, and its entity ID is derived from its alias — not from its id.
 state, and whether an automation is enabled. The provider does not manage runtime state. See
 ADR-0012.
 
+**User** — An account that can use HA. It has a random hex ID, a name, a group, and optionally
+a **login**: a username and password of HA's own `homeassistant` auth provider.
+
+**Owner** — The user created during onboarding. It cannot be deleted, and only it may change
+another user's username or password.
+
+**Group** — What a user may do. The provider uses HA's system groups `system-admin`,
+`system-users` and `system-read-only`, as `admin`, `user` and `read-only`.
+
+**Person** — Someone whose presence HA tracks with device trackers, optionally linked to a user.
+Its ID is generated from its name.
+
 **Lovelace** — HA's dashboard system. Its WebSocket commands are prefixed `lovelace/`.
 
 **Lovelace resource** — A URL that the frontend loads on every dashboard, such as the
