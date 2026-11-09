@@ -71,7 +71,9 @@ func (r *lovelaceResourceResource) Schema(_ context.Context, _ resource.SchemaRe
 			"url": schema.StringAttribute{
 				Description: "URL of the file, e.g. `/hacsfiles/button-card/button-card.js` or " +
 					"`/local/my-card.js`. Changing it updates the resource in place. Creating or " +
-					"updating fails if another resource has this URL; import that one instead.",
+					"updating fails if another resource has exactly this URL; import that one instead. " +
+					"HACS registers its resources with a `?hacstag=` query, so import those by their " +
+					"full URL rather than declaring them without it.",
 				Required: true,
 			},
 			"type": schema.StringAttribute{
@@ -110,7 +112,8 @@ func (r *lovelaceResourceResource) Create(ctx context.Context, req resource.Crea
 }
 
 // urlFree reports whether no resource but the one with the ID self has the URL, and adds an
-// error otherwise: Home Assistant would keep both, and the frontend would load the file twice.
+// error otherwise: Home Assistant would keep both, and the frontend would load the file twice
+// (ADR-0029).
 func (r *lovelaceResourceResource) urlFree(ctx context.Context, url, self string, diags *diag.Diagnostics) bool {
 	other, ok, err := r.resources.Find(ctx, func(l client.LovelaceResource) bool { return l.URL == url && l.ID != self })
 	if err != nil {

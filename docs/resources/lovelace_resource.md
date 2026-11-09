@@ -43,7 +43,7 @@ resource "homeassistant_dashboard" "home" {
 ### Required
 
 - `type` (String) How the frontend loads it: `module` (a JavaScript module, what most custom cards are), `js` (a classic script), or `css` (a stylesheet).
-- `url` (String) URL of the file, e.g. `/hacsfiles/button-card/button-card.js` or `/local/my-card.js`. Changing it updates the resource in place. Creating or updating fails if another resource has this URL; import that one instead.
+- `url` (String) URL of the file, e.g. `/hacsfiles/button-card/button-card.js` or `/local/my-card.js`. Changing it updates the resource in place. Creating or updating fails if another resource has exactly this URL; import that one instead. HACS registers its resources with a `?hacstag=` query, so import those by their full URL rather than declaring them without it.
 
 ### Read-Only
 
