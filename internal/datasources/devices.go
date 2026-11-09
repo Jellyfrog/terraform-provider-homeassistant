@@ -50,10 +50,14 @@ func stringList[S ~string](ss []S) types.List {
 	return types.ListValueMust(types.StringType, elems)
 }
 
-// pairList converts registry pairs to a list(list(string)), empty rather than null.
+// pairList converts registry pairs to a list(list(string)), empty rather than null. HA keeps them
+// as sets, so they are sorted: an order that differs between reads changes nothing. Each pair keeps
+// its own order.
 func pairList(rows [][]client.RegistryString) types.List {
-	elems := make([]attr.Value, len(rows))
-	for i, row := range rows {
+	sorted := slices.Clone(rows)
+	slices.SortFunc(sorted, slices.Compare)
+	elems := make([]attr.Value, len(sorted))
+	for i, row := range sorted {
 		elems[i] = stringList(row)
 	}
 	return types.ListValueMust(pairType, elems)

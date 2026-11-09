@@ -198,8 +198,8 @@ its entities too.
   unknown domain matches nothing), `manufacturer`, `model`, `area_id`, `label` (a label ID).
   `devices` is a list of objects with `device_id`, `name`, `name_by_user`, `manufacturer`,
   `model`, `sw_version`, `area_id`, `labels`, `config_entries`, `identifiers` and `connections`
-  (each list(list(string)), `[domain or type, value]` pairs, empty rather than null), sorted by
-  `device_id`.
+  (each list(list(string)), `[domain or type, value]` pairs, empty rather than null, the pairs
+  sorted since HA keeps them as sets), sorted by `device_id`.
 - `homeassistant_device` — matched by exactly one of `device_id`, `name` or `identifier`. `name`
   is compared with `name_by_user` first, then, only if no device matches that way, with `name`.
   `identifier` (list(string) of two elements) matches the devices whose `identifiers` contain

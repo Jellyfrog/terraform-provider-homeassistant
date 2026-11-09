@@ -96,8 +96,13 @@ func TestMatchDevice(t *testing.T) {
 
 func TestNewDeviceModelPairs(t *testing.T) {
 	m := newDeviceModel(testDevices[0])
-	if got := m.Identifiers.String(); got != `[["mqtt","zigbee2mqtt_0x00158d0004aaf230"],["moon","7"]]` {
+	// HA keeps them as sets: sorted, so a different order from HA changes nothing. Each pair keeps
+	// its own order.
+	if got := m.Identifiers.String(); got != `[["moon","7"],["mqtt","zigbee2mqtt_0x00158d0004aaf230"]]` {
 		t.Errorf("identifiers = %s", got)
+	}
+	if got := testDevices[0].Identifiers[0][0]; got != "mqtt" {
+		t.Errorf("the client's device was reordered: identifiers[0][0] = %s", got)
 	}
 	if got := m.Connections.String(); got != `[["mac","dc:a6:32:54:1f:88"]]` {
 		t.Errorf("connections = %s", got)
