@@ -290,8 +290,8 @@ func checkEntityIDs(name string, ids ...string) resource.TestCheckFunc {
 
 // setUpTwinDevices starts an MQTT broker, sets up the MQTT integration, and announces two devices
 // through MQTT discovery. Both are named "Acc Twin" and have one sensor named "Temperature", so
-// the sensors share the friendly name "Acc Twin Temperature". It returns the device IDs and the
-// IDs of their sensors.
+// the sensors share the friendly name "Acc Twin Temperature". The second sensor has the entity
+// category `diagnostic`, the first none. It returns the device IDs and the IDs of their sensors.
 func setUpTwinDevices(t *testing.T) (deviceIDs, entityIDs [2]string) {
 	t.Helper()
 	ha := acctest.SharedInstance(t)
@@ -319,11 +319,15 @@ func setUpTwinDevices(t *testing.T) (deviceIDs, entityIDs [2]string) {
 	registry := client.Entities(c.WS)
 	for i, id := range []string{"acc_twin_one", "acc_twin_two"} {
 		topic := "homeassistant/sensor/" + id + "/config"
-		config, err := json.Marshal(map[string]any{
+		discovery := map[string]any{
 			"name": "Temperature", "unique_id": id + "_temperature", "state_topic": id + "/temperature",
 			"device_class": "temperature", "unit_of_measurement": "°C",
 			"device": map[string]any{"identifiers": []string{id}, "name": "Acc Twin"},
-		})
+		}
+		if i == 1 {
+			discovery["entity_category"] = "diagnostic"
+		}
+		config, err := json.Marshal(discovery)
 		must(err)
 		t.Cleanup(func() {
 			_ = c.REST.Do(context.Background(), http.MethodPost, "services/mqtt/publish",

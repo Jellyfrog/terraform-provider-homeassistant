@@ -65,7 +65,7 @@ Which operation uses which transport:
 | Subentry flows (create, reconfigure) | REST | `POST /api/config/config_entries/subentries/flow`, `POST/DELETE …/flow/<flow_id>` |
 | Read / delete config subentries | WS | `config_entries/subentries/list\|delete`, `config_entries/get_single` (supported subentry types) |
 | Floor / area / label registry | WS | `config/<x>_registry/list\|create\|update\|delete` |
-| Entity / device registry | WS | `config/entity_registry/get\|update`, `config/device_registry/list\|update` |
+| Entity / device registry | WS | `config/entity_registry/get\|list\|update`, `config/device_registry/list\|update` |
 | Helpers (`input_*`, `counter`, `timer`, `schedule`) | WS | `<domain>/list\|create\|update\|delete` (id field `<domain>_id`) |
 | Energy dashboard preferences | WS | `energy/get_prefs`, `energy/save_prefs` |
 | Dashboards | WS | `lovelace/dashboards/list\|create\|update\|delete`, `lovelace/config`, `lovelace/config/save\|delete` |
@@ -82,6 +82,7 @@ Which operation uses which transport:
 | `homeassistant_template` | [data-sources.md](data-sources.md) |
 | `homeassistant_area`, `homeassistant_areas` | [registries.md](registries.md) |
 | `homeassistant_device`, `homeassistant_devices` | [registries.md](registries.md) |
+| `homeassistant_entity_registry` | [registries.md](registries.md) |
 | `homeassistant_integration` | [integrations.md](integrations.md) |
 
 ### Resources
