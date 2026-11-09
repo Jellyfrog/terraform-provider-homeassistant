@@ -52,7 +52,7 @@ Every filter is optional, and an entity must match all that are set.
 | `area` | string | area ID or name, resolved through `area_entities()`; an unknown area matches nothing |
 | `label` | string | label ID or name, resolved through `label_entities()`; an unknown label matches nothing |
 | `device_class` | string | equals `attributes.device_class` |
-| `name_pattern` | string | glob against `friendly_name`: `*` is any characters, `?` one character, everything else is literal and case-sensitive. Entities without a `friendly_name` never match |
+| `name_pattern` | string | glob against `friendly_name`: `*` is any characters, `?` one character, everything else is literal and case-sensitive. Entities without a `friendly_name` never match. Since HA 2026.11, `friendly_name` has the device name in front of user-set names too and follows device renames (see [registries.md](registries.md)), so the description points to `*` patterns and `device_id` |
 | `hidden` | bool | `false`: only entities that aren't hidden; `true`: only hidden ones; unset: no filter. Hidden means `hidden_by` is set, by the user or an integration. Entities without a registry entry are never hidden (ADR-0022) |
 | `device_id` | string | device ID, resolved through `device_entities()`; an unknown device matches nothing. To look up a device by name, use `data.homeassistant_device` (ADR-0022) |
 
