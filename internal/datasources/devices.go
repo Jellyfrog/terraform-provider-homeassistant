@@ -254,13 +254,15 @@ func (f deviceFilter) apply(devices []client.Device) []client.Device {
 	return out
 }
 
+// ptrMatches reports whether got equals want, or want is nil: an unset filter matches anything,
+// and a set one never matches a null value.
+func ptrMatches(want, got *string) bool {
+	return want == nil || (got != nil && *got == *want)
+}
+
 func (f deviceFilter) matches(d client.Device) bool {
-	for _, c := range []struct{ want, got *string }{
-		{f.manufacturer, d.Manufacturer}, {f.model, d.Model}, {f.areaID, d.AreaID},
-	} {
-		if c.want != nil && (c.got == nil || *c.got != *c.want) {
-			return false
-		}
+	if !ptrMatches(f.manufacturer, d.Manufacturer) || !ptrMatches(f.model, d.Model) || !ptrMatches(f.areaID, d.AreaID) {
+		return false
 	}
 	if f.label != nil && !slices.Contains(d.Labels, *f.label) {
 		return false

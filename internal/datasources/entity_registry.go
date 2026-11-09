@@ -168,15 +168,6 @@ func (f entityRegistryFilter) matches(e client.EntityEntry) bool {
 	if f.domain != nil && !strings.HasPrefix(e.EntityID, *f.domain+".") {
 		return false
 	}
-	if f.platform != nil && e.Platform != *f.platform {
-		return false
-	}
-	for _, c := range []struct{ want, got *string }{
-		{f.deviceID, e.DeviceID}, {f.entityCategory, e.EntityCategory},
-	} {
-		if c.want != nil && (c.got == nil || *c.got != *c.want) {
-			return false
-		}
-	}
-	return true
+	return ptrMatches(f.platform, &e.Platform) && ptrMatches(f.deviceID, e.DeviceID) &&
+		ptrMatches(f.entityCategory, e.EntityCategory)
 }

@@ -57,6 +57,8 @@ output "unknown_device_count" {
 }
 `, deviceIDs[0], deviceIDs[1])
 	first := "data.homeassistant_entity_registry.first"
+	second := "data.homeassistant_entity_registry.second"
+	diagnostic := "data.homeassistant_entity_registry.mqtt_diagnostic"
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
@@ -73,10 +75,10 @@ output "unknown_device_count" {
 					resource.TestCheckNoResourceAttr(first, "entities.0.disabled_by"),
 					resource.TestCheckNoResourceAttr(first, "entities.0.hidden_by"),
 					resource.TestCheckResourceAttrSet(first, "entities.0.id"),
-					resource.TestCheckResourceAttr("data.homeassistant_entity_registry.second", "entities.#", "1"),
-					resource.TestCheckResourceAttr("data.homeassistant_entity_registry.second", "entities.0.entity_category", "diagnostic"),
-					resource.TestCheckResourceAttr("data.homeassistant_entity_registry.mqtt_diagnostic", "entities.#", "1"),
-					resource.TestCheckResourceAttr("data.homeassistant_entity_registry.mqtt_diagnostic", "entities.0.entity_id", entityIDs[1]),
+					resource.TestCheckResourceAttr(second, "entities.#", "1"),
+					resource.TestCheckResourceAttr(second, "entities.0.entity_category", "diagnostic"),
+					resource.TestCheckResourceAttr(diagnostic, "entities.#", "1"),
+					resource.TestCheckResourceAttr(diagnostic, "entities.0.entity_id", entityIDs[1]),
 					resource.TestCheckOutput("first_primary", fmt.Sprintf("[%q]", entityIDs[0])),
 					resource.TestCheckOutput("second_has_primary", "false"),
 					resource.TestCheckOutput("unknown_device_count", "0"),
