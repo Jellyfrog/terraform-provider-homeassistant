@@ -2,8 +2,6 @@ package datasources
 
 import (
 	"context"
-	"sort"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -49,7 +47,7 @@ func newEntityRegistryEntry(e client.EntityEntry) entityRegistryEntry {
 	return entityRegistryEntry{
 		ID:             types.StringValue(e.ID),
 		EntityID:       types.StringValue(e.EntityID),
-		UniqueID:       types.StringValue(e.UniqueID),
+		UniqueID:       types.StringValue(string(e.UniqueID)),
 		Platform:       types.StringValue(e.Platform),
 		DeviceID:       types.StringPointerValue(e.DeviceID),
 		EntityCategory: types.StringPointerValue(e.EntityCategory),
@@ -153,19 +151,12 @@ type entityRegistryFilter struct {
 
 // apply returns the entries that pass every filter, sorted by entity ID.
 func (f entityRegistryFilter) apply(entries []client.EntityEntry) []client.EntityEntry {
-	var out []client.EntityEntry
-	for _, e := range entries {
-		if f.matches(e) {
-			out = append(out, e)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].EntityID < out[j].EntityID })
-	return out
+	return filterSorted(entries, f.matches, func(e client.EntityEntry) string { return e.EntityID })
 }
 
 // matches reports whether e passes every filter that is set.
 func (f entityRegistryFilter) matches(e client.EntityEntry) bool {
-	if f.domain != nil && !strings.HasPrefix(e.EntityID, *f.domain+".") {
+	if f.domain != nil && !inDomain(e.EntityID, *f.domain) {
 		return false
 	}
 	return ptrMatches(f.platform, &e.Platform) && ptrMatches(f.deviceID, e.DeviceID) &&

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -230,18 +229,11 @@ type entityFilter struct {
 
 // apply returns the states that pass every filter, sorted by entity ID.
 func (f entityFilter) apply(states []client.EntityState) []client.EntityState {
-	var out []client.EntityState
-	for _, s := range states {
-		if f.matches(s) {
-			out = append(out, s)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].EntityID < out[j].EntityID })
-	return out
+	return filterSorted(states, f.matches, func(s client.EntityState) string { return s.EntityID })
 }
 
 func (f entityFilter) matches(s client.EntityState) bool {
-	if f.domain != "" && !strings.HasPrefix(s.EntityID, f.domain+".") {
+	if f.domain != "" && !inDomain(s.EntityID, f.domain) {
 		return false
 	}
 	if f.area != nil && !f.area[s.EntityID] {

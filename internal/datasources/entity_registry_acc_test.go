@@ -1,6 +1,7 @@
 package datasources_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -86,7 +87,13 @@ output "unknown_device_count" {
 			},
 			{
 				PreConfig: func() {
-					updateEntity(t, entitiesClient(t), map[string]any{"entity_id": entityIDs[0], "disabled_by": "user"})
+					c := entitiesClient(t)
+					updateEntity(t, c, map[string]any{"entity_id": entityIDs[0], "disabled_by": "user"})
+					// Best effort: other tests announce the same sensor again on this instance.
+					t.Cleanup(func() {
+						_ = c.WS.Command(context.Background(), "config/entity_registry/update",
+							map[string]any{"entity_id": entityIDs[0], "disabled_by": nil}, nil)
+					})
 				},
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(

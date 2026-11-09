@@ -15,11 +15,12 @@ import (
 
 // testEntityRegistry is the entity registry as HA lists it: entries with a device and a
 // category, with a device only, with a category only, and with neither; one of them is
-// disabled and two are hidden.
+// disabled, two are hidden, and one has a numeric unique ID, as HA keeps it for integrations
+// that reported one.
 const testEntityRegistry = `[
 	{"id": "r1", "entity_id": "sensor.plug_rssi", "unique_id": "0x01_rssi", "platform": "mqtt",
 	 "device_id": "dev_plug", "entity_category": "diagnostic", "disabled_by": "integration", "hidden_by": null},
-	{"id": "r2", "entity_id": "switch.plug", "unique_id": "0x01_switch", "platform": "mqtt",
+	{"id": "r2", "entity_id": "switch.plug", "unique_id": 1001, "platform": "mqtt",
 	 "device_id": "dev_plug", "entity_category": null, "disabled_by": null, "hidden_by": null},
 	{"id": "r3", "entity_id": "switch.plug_child_lock", "unique_id": "0x01_lock", "platform": "mqtt",
 	 "device_id": "dev_plug", "entity_category": "config", "disabled_by": null, "hidden_by": "user"},
@@ -86,7 +87,7 @@ func TestEntityRegistryRead(t *testing.T) {
 			DeviceID: s("dev_plug"), EntityCategory: s("diagnostic"), DisabledBy: s("integration"), HiddenBy: null,
 		},
 		{
-			ID: s("r2"), EntityID: s("switch.plug"), UniqueID: s("0x01_switch"), Platform: s("mqtt"),
+			ID: s("r2"), EntityID: s("switch.plug"), UniqueID: s("1001"), Platform: s("mqtt"),
 			DeviceID: s("dev_plug"), EntityCategory: null, DisabledBy: null, HiddenBy: null,
 		},
 		{

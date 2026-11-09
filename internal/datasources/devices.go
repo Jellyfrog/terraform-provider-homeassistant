@@ -244,20 +244,7 @@ type deviceFilter struct {
 
 // apply returns the devices that pass every filter, sorted by ID.
 func (f deviceFilter) apply(devices []client.Device) []client.Device {
-	var out []client.Device
-	for _, d := range devices {
-		if f.matches(d) {
-			out = append(out, d)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
-}
-
-// ptrMatches reports whether got equals want, or want is nil: an unset filter matches anything,
-// and a set one never matches a null value.
-func ptrMatches(want, got *string) bool {
-	return want == nil || (got != nil && *got == *want)
+	return filterSorted(devices, f.matches, func(d client.Device) string { return d.ID })
 }
 
 func (f deviceFilter) matches(d client.Device) bool {
