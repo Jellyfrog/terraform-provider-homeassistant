@@ -138,3 +138,29 @@ Since Home Assistant 2026.x (checked in 2026.9.4), a default dashboard with a sa
 migrated at startup to an ordinary storage dashboard listed as `lovelace`. Commands without
 `url_path` address that dashboard when it exists, so this resource keeps working across the
 migration. A fresh instance has no `lovelace` entry until the migration runs.
+
+## `homeassistant_lovelace_resource`
+
+A Lovelace resource: a URL the frontend loads on every dashboard, such as a custom card's
+JavaScript. Only while Lovelace keeps its resources in storage (the default). In YAML mode
+`lovelace/resources` lists the YAML resources, which have no ID, and `create`, `update` and
+`delete` don't exist: Read, Create, Update and Delete fail, and the resource stays in state.
+Neither Read nor import ever matches a resource without an ID, so a YAML resource can't be
+imported or end up in state.
+
+| Argument | Type | Notes |
+|---|---|---|
+| `url` | string, required | in-place update |
+| `type` | string, required: `module`, `js` or `css` | in-place update; sent as `res_type` |
+
+| Computed | Notes |
+|---|---|
+| `id` | HA's random resource ID |
+
+| Operation | Command |
+|---|---|
+| Create | `lovelace/resources` (fails if a resource has exactly the same `url`, since HA would load it twice; the error names its ID for import, ADR-0029; the check and the create hold a provider-wide lock) → `lovelace/resources/create` (`res_type`, `url`) |
+| Read | `lovelace/resources` (find by `id`; missing → `lovelace/info`: `resource_mode` `storage` → remove from state, else error) |
+| Update | `lovelace/resources` (fails if another resource has the new `url`, as for Create) → `lovelace/resources/update` (`resource_id`, `res_type`, `url`) |
+| Delete | `lovelace/resources/delete` (`resource_id`; a resource that is gone counts as deleted, `unknown_command` does not) |
+| Import | by `id` or by `url`; a `url` that several resources share is an error (import by `id`) |

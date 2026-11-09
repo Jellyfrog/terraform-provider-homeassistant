@@ -15,7 +15,9 @@ scenes, helpers, dashboards, and integrations.
 - **Helpers:** `input_boolean`, `input_number`, `input_text`, `input_select`, `input_datetime`,
   `input_button`, `counter`, `timer` and `schedule`, validated at plan time.
 - **Dashboards** (`homeassistant_dashboard`, and `homeassistant_default_dashboard` for the built-in
-  default dashboard) and the **Energy dashboard preferences** (`homeassistant_energy_preferences`).
+  default dashboard), the Lovelace resources that custom cards need
+  (`homeassistant_lovelace_resource`), and the **Energy dashboard preferences**
+  (`homeassistant_energy_preferences`).
 - **Integrations:** any config entry by answering its config flow
   (`homeassistant_integration`), and its subentries by answering their subentry flows
   (`homeassistant_integration_subentry`), plus typed resources for ESPHome and MQTT

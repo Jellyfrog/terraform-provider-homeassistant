@@ -6,31 +6,43 @@ import (
 	"maps"
 )
 
-// Registry is one of HA's WebSocket registries with the commands `<prefix>/list`, `/create`,
-// `/update`, and `/delete`, which name an object by its ID in the field `key`. Floors, areas,
-// labels, and input helpers all follow this shape.
+// Registry is one of HA's WebSocket registries with the commands `<prefix>/create`, `/update`,
+// and `/delete`, which name an object by its ID in the field `key`, and a list command
+// (`<prefix>/list` unless list says otherwise). Floors, areas, labels, input helpers, and
+// Lovelace resources follow this shape.
 type Registry[T any] struct {
 	ws     WSCommander
 	prefix string
 	key    string
 	idOf   func(T) string
+	// list is the list command, if it is not `<prefix>/list`.
+	list string
 }
 
 // List returns every object in the registry.
 func (r Registry[T]) List(ctx context.Context) ([]T, error) {
+	cmd := r.list
+	if cmd == "" {
+		cmd = r.prefix + "/list"
+	}
 	var items []T
-	err := r.ws.Command(ctx, r.prefix+"/list", nil, &items)
+	err := r.ws.Command(ctx, cmd, nil, &items)
 	return items, err
 }
 
 // Get returns the object with the given ID. ok is false if there is none.
 func (r Registry[T]) Get(ctx context.Context, id string) (item T, ok bool, err error) {
+	return r.Find(ctx, func(it T) bool { return r.idOf(it) == id })
+}
+
+// Find returns the first object for which match is true. ok is false if there is none.
+func (r Registry[T]) Find(ctx context.Context, match func(T) bool) (item T, ok bool, err error) {
 	items, err := r.List(ctx)
 	if err != nil {
 		return item, false, err
 	}
 	for _, it := range items {
-		if r.idOf(it) == id {
+		if match(it) {
 			return it, true, nil
 		}
 	}
@@ -66,10 +78,12 @@ func (r Registry[T]) Delete(ctx context.Context, id string) error {
 
 // IgnoreGone returns nil if err is an error from HA and exists then reports that the object the
 // command was about is gone, and err otherwise. HA reports a missing ID as a generic error, so
-// only asking again tells a missing object apart from a real failure.
+// only asking again tells a missing object apart from a real failure. An unknown command is never
+// a missing object: the command does not exist on this instance (e.g. Lovelace resources in YAML
+// mode).
 func IgnoreGone(ctx context.Context, err error, exists func(context.Context) (bool, error)) error {
 	var wsErr *WSError
-	if errors.As(err, &wsErr) {
+	if errors.As(err, &wsErr) && wsErr.Code != "unknown_command" {
 		if ok, getErr := exists(ctx); getErr == nil && !ok {
 			return nil
 		}
