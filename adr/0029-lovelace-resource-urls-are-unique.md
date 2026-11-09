@@ -34,7 +34,8 @@ ID.
 
 ## Consequences
 
-- Applying a configuration never adds a second resource with a URL that one already has.
+- Applying a configuration never adds a second resource with a URL that one already has, except
+  when separate runs race to create the same new URL (see below).
 - The comparison is exact. HACS registers its resources with a `?hacstag=…` query, so
   `/hacsfiles/button-card/button-card.js` in the configuration does not match HACS's
   `/hacsfiles/button-card/button-card.js?hacstag=…`, and the frontend loads both. Import HACS's

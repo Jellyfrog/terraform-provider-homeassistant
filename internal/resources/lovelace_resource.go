@@ -148,7 +148,9 @@ func (r *lovelaceResourceResource) Read(ctx context.Context, req resource.ReadRe
 		return
 	}
 
-	l, ok, err := r.resources.Get(ctx, state.ID.ValueString())
+	// YAML resources have no ID; an empty ID must not match one of them.
+	id := state.ID.ValueString()
+	l, ok, err := r.resources.Find(ctx, func(l client.LovelaceResource) bool { return l.ID != "" && l.ID == id })
 	if err != nil {
 		resp.Diagnostics.AddError("Reading Lovelace resource", client.ErrorDetail(err))
 		return
@@ -214,6 +216,9 @@ func (r *lovelaceResourceResource) ImportState(ctx context.Context, req resource
 	}
 	var ids []string
 	for _, l := range all {
+		if l.ID == "" {
+			continue // a YAML resource, which the provider cannot manage
+		}
 		if l.ID == req.ID {
 			ids = []string{l.ID}
 			break
@@ -224,8 +229,12 @@ func (r *lovelaceResourceResource) ImportState(ctx context.Context, req resource
 	}
 	switch len(ids) {
 	case 0:
-		resp.Diagnostics.AddError("Lovelace resource not found",
-			fmt.Sprintf("No Lovelace resource has the ID or URL %q.", req.ID))
+		detail := fmt.Sprintf("No Lovelace resource has the ID or URL %q.", req.ID)
+		if mode, err := client.LovelaceResourceMode(ctx, r.ws); err == nil && mode != "storage" {
+			detail += fmt.Sprintf(" Home Assistant keeps its Lovelace resources in %s mode; only "+
+				"resources in storage mode can be imported.", mode)
+		}
+		resp.Diagnostics.AddError("Lovelace resource not found", detail)
 	case 1:
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), ids[0])...)
 	default:

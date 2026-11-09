@@ -89,3 +89,17 @@ func TestLovelaceResourceDelete(t *testing.T) {
 		t.Errorf("delete: deleted %v, %v; want [a1], no error", f.deleted, resp.Diagnostics)
 	}
 }
+
+func TestLovelaceResourceEmptyIDNeverMatchesYAMLResource(t *testing.T) {
+	yaml := []client.LovelaceResource{{Type: "module", URL: "/local/card.js"}}
+	resp := readLovelace(t, &fakeLovelaceResources{mode: "yaml", yaml: yaml}, "")
+	checkDiags(t, resp.Diagnostics, "resource_mode")
+}
+
+func TestLovelaceResourceImportSkipsYAMLResources(t *testing.T) {
+	f := &fakeLovelaceResources{mode: "yaml", yaml: []client.LovelaceResource{{Type: "module", URL: "/local/card.js"}}}
+	r := newLovelaceResourceResource(f)
+	resp := resource.ImportStateResponse{State: lovelaceState(t, "x")}
+	r.ImportState(t.Context(), resource.ImportStateRequest{ID: "/local/card.js"}, &resp)
+	checkDiags(t, resp.Diagnostics, "yaml mode")
+}

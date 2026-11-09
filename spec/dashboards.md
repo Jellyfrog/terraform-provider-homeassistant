@@ -145,6 +145,8 @@ A Lovelace resource: a URL the frontend loads on every dashboard, such as a cust
 JavaScript. Only while Lovelace keeps its resources in storage (the default). In YAML mode
 `lovelace/resources` lists the YAML resources, which have no ID, and `create`, `update` and
 `delete` don't exist: Read, Create, Update and Delete fail, and the resource stays in state.
+Neither Read nor import ever matches a resource without an ID, so a YAML resource can't be
+imported or end up in state.
 
 | Argument | Type | Notes |
 |---|---|---|
