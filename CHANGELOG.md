@@ -13,7 +13,11 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
   of those entities' stored names. A `homeassistant_entity_settings` whose `name` starts with the
   device name then plans a change after the upgrade: drop the device name from `name` (`Power`,
   not `Kitchen Lamp Power`) instead of applying it. Entities with an area of their own keep their
-  stored name and plan no change.
+  stored name and plan no change. The prefix match ignores case: a name equal to the device name
+  (`CO2` on the device `Co2`) becomes `""`, so `name = "CO2"` then plans a change from `""` and
+  would show "Co2 CO2". An all-lowercase rest is capitalised (`kitchen lamp power` becomes
+  `Power`), so the planned change can differ only in case. Lookups by `friendly_name`
+  (`homeassistant_entities` `name_pattern`) can break as well (#98).
 - New resource `homeassistant_energy_preferences`: the Energy dashboard's sources and tracked devices,
   as dynamic `energy_sources`, `device_consumption` and `device_consumption_water`. There is one per
   instance. Create fails if non-empty preferences already exist (import them), and destroy resets

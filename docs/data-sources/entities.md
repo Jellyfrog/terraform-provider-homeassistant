@@ -79,7 +79,7 @@ output "desk_lamp_entity_ids" {
 - `domain` (String) Only entities of this domain, e.g. `light`.
 - `hidden` (Boolean) `false` gives only entities that aren't hidden, `true` only hidden ones; unset applies no filter. An entity is hidden when its registry entry has `hidden_by` set, by the user or by an integration. Entities without a registry entry are never hidden. There is no filter on disabled entities: HA removes them from the states.
 - `label` (String) Only entities with this label, given by label ID or name. An unknown label matches no entities.
-- `name_pattern` (String) Only entities whose `friendly_name` matches this glob pattern: `*` matches any characters, `?` matches one character, and everything else matches itself, case-sensitively. Entities without a `friendly_name` never match.
+- `name_pattern` (String) Only entities whose `friendly_name` matches this glob pattern: `*` matches any characters, `?` matches one character, and everything else matches itself, case-sensitively. Entities without a `friendly_name` never match. Since Home Assistant 2026.11, `friendly_name` puts the device name in front of names set by the user too, and it changes when the device is renamed, for every entity without a name of its own. A leading `*` (`"*Power"`) matches with and without the device name, and `?` covers a change of case (`"C?2"`). Home Assistant plans to deprecate `friendly_name`; filtering by `device_id` is more stable.
 
 ### Read-Only
 

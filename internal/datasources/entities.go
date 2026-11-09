@@ -77,7 +77,12 @@ func (d *entitiesDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 			"name_pattern": schema.StringAttribute{
 				Description: "Only entities whose `friendly_name` matches this glob pattern: `*` matches " +
 					"any characters, `?` matches one character, and everything else matches itself, " +
-					"case-sensitively. Entities without a `friendly_name` never match.",
+					"case-sensitively. Entities without a `friendly_name` never match. Since Home " +
+					"Assistant 2026.11, `friendly_name` puts the device name in front of names set by " +
+					"the user too, and it changes when the device is renamed, for every entity without " +
+					"a name of its own. A leading `*` (`\"*Power\"`) matches with and without the " +
+					"device name, and `?` covers a change of case (`\"C?2\"`). Home Assistant plans to " +
+					"deprecate `friendly_name`; filtering by `device_id` is more stable.",
 				Optional: true,
 			},
 			"device_id": schema.StringAttribute{

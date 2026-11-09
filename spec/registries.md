@@ -115,11 +115,22 @@ resource "homeassistant_entity_settings" "ceiling" {
 | `disabled` | bool → `disabled_by: "user"`, or `null` if it was `"user"` | `null` if `true` |
 
 Since HA 2026.11, HA shows the device name in front of a `name` set here, as it always did for
-the integration's name, unless the entity has an area of its own. Upgrading HA to 2026.11 strips the device name from the front of stored
-names when the entity has no area of its own (entity registry 1.24), so a config with
-`name = "Kitchen Lamp Power"` on the device "Kitchen Lamp" then plans a change from `"Power"`.
-The provider passes `name` through unchanged and does not rewrite it; the config has to drop the
-device name.
+the integration's name, unless the entity has an area of its own. Upgrading HA to 2026.11 strips
+the device name from the front of stored names when the entity has no area of its own (entity
+registry 1.24), so a config with `name = "Kitchen Lamp Power"` on the device "Kitchen Lamp" then
+plans a change from `"Power"`. The provider passes `name` through unchanged and does not rewrite
+it; the config has to drop the device name. Two details of the stripping show up in plans:
+
+- The prefix match ignores case, and a name equal to the device name is stripped to `""`, not
+  `null`. An entity named `CO2` on the device `Co2` then has `name = ""`, shows only the device
+  name (`Co2`), and a config with `name = "CO2"` plans a change from `""`. Applying it shows
+  "Co2 CO2".
+- An all-lowercase first word of what remains is capitalised: `kitchen lamp power` on the device
+  "Kitchen Lamp" becomes `Power`, so the planned change can differ in case, not only by the prefix.
+
+For names it did not strip, the upgrade keeps the old `friendly_name` in a hidden `compat_name`.
+HA drops it as soon as the entity's or its device's name changes, so `friendly_name` becomes
+"device name + entity name" on the first rename after the upgrade, not at the upgrade itself.
 
 `hidden_by` and `disabled_by` can also be set by integrations, devices, or config entries. The
 provider maps the read-back value `"user"` to `true` and anything else to `false`, so `false`
