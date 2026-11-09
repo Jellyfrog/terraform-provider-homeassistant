@@ -41,7 +41,8 @@ func TestDevicesDecode(t *testing.T) {
 func TestDevicesDecodeNumericRegistryValues(t *testing.T) {
 	devices := Devices(fakeWS{"config/device_registry/list": fixed(`[
 		{"id": "d3", "name": "Printer", "sw_version": 62092, "hw_version": 2,
-		 "identifiers": [["broadlink", 1234], ["x", "y"]], "labels": [], "config_entries": []}
+		 "identifiers": [["broadlink", 1234], ["x", "y"]], "connections": [["zigbee", 42]],
+		 "labels": [], "config_entries": []}
 	]`)})
 
 	d, ok, err := devices.Get(context.Background(), "d3")
@@ -55,5 +56,8 @@ func TestDevicesDecodeNumericRegistryValues(t *testing.T) {
 	want := [][]RegistryString{{"broadlink", "1234"}, {"x", "y"}}
 	if !slices.EqualFunc(d.Identifiers, want, slices.Equal) {
 		t.Errorf("identifiers = %v, want %v", d.Identifiers, want)
+	}
+	if want := [][]RegistryString{{"zigbee", "42"}}; !slices.EqualFunc(d.Connections, want, slices.Equal) {
+		t.Errorf("connections = %v, want %v", d.Connections, want)
 	}
 }

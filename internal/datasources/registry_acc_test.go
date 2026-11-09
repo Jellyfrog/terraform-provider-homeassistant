@@ -111,7 +111,7 @@ data "homeassistant_area" "both" {
 				Config: acctest.ProviderConfig + `
 data "homeassistant_device" "neither" {}
 `,
-				ExpectError: regexp.MustCompile("Set exactly one of `device_id` and `name`"),
+				ExpectError: regexp.MustCompile("Set exactly one of `device_id`, `name` and `identifier`"),
 			},
 			{
 				Config: acctest.ProviderConfig + fmt.Sprintf(`
@@ -154,6 +154,10 @@ data "homeassistant_device" "by_integration_name" {
   name = "Moon"
 }
 
+data "homeassistant_device" "by_identifier" {
+  identifier = data.homeassistant_devices.moon.devices[0].identifiers[0]
+}
+
 output "area_listed" {
   value = contains([for a in data.homeassistant_areas.all.areas : a.area_id], %[1]q)
 }
@@ -183,6 +187,15 @@ output "area_listed" {
 					resource.TestCheckResourceAttr("data.homeassistant_device.by_name_by_user", "device_id", f.deviceID),
 					resource.TestCheckResourceAttr("data.homeassistant_device.by_name_by_user", "name", "Acc Moon"),
 					resource.TestCheckResourceAttr("data.homeassistant_device.by_integration_name", "device_id", f.deviceID),
+					// moon identifies its device by its config entry.
+					resource.TestCheckResourceAttr("data.homeassistant_devices.moon", "devices.0.identifiers.#", "1"),
+					resource.TestCheckResourceAttr("data.homeassistant_devices.moon", "devices.0.identifiers.0.0", "moon"),
+					resource.TestCheckResourceAttr("data.homeassistant_devices.moon", "devices.0.identifiers.0.1", f.entryID),
+					resource.TestCheckResourceAttr("data.homeassistant_devices.moon", "devices.0.connections.#", "0"),
+					resource.TestCheckResourceAttr("data.homeassistant_device.by_identifier", "device_id", f.deviceID),
+					resource.TestCheckResourceAttr("data.homeassistant_device.by_identifier", "identifier.0", "moon"),
+					resource.TestCheckResourceAttr("data.homeassistant_device.by_identifier", "identifier.1", f.entryID),
+					resource.TestCheckResourceAttr("data.homeassistant_device.by_id", "identifiers.0.0", "moon"),
 				),
 			},
 		},
