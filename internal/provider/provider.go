@@ -135,6 +135,7 @@ func (p *HomeAssistantProvider) DataSources(_ context.Context) []func() datasour
 		datasources.NewAreas,
 		datasources.NewDevice,
 		datasources.NewDevices,
+		datasources.NewEntityRegistry,
 	}
 }
 

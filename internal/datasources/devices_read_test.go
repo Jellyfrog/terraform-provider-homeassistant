@@ -13,26 +13,43 @@ import (
 	"github.com/toelke/terraform-provider-homeassistant/internal/client"
 )
 
-// deviceRegistryWS is a WSCommander that answers `config/device_registry/list` with its JSON.
-type deviceRegistryWS string
+// registryWS is a WSCommander that answers the command typ with json, or with err if it is set.
+type registryWS struct {
+	typ, json string
+	err       error
+}
 
-func (ws deviceRegistryWS) Command(_ context.Context, typ string, _ map[string]any, result any) error {
-	if typ != "config/device_registry/list" {
+// Command answers ws.typ with ws.json decoded into result, or with ws.err.
+func (ws registryWS) Command(_ context.Context, typ string, _ map[string]any, result any) error {
+	if typ != ws.typ {
 		return fmt.Errorf("unexpected command %q", typ)
 	}
-	return json.Unmarshal([]byte(ws), result)
+	if ws.err != nil {
+		return ws.err
+	}
+	return json.Unmarshal([]byte(ws.json), result)
 }
 
 // Two devices as HA lists them: one with identifiers and connections (one with a numeric
 // component), one without either key.
-const registryDevices = deviceRegistryWS(`[
+var registryDevices = registryWS{typ: "config/device_registry/list", json: `[
 	{"id": "d1", "name": "Plug", "labels": [], "config_entries": ["E1"],
 	 "identifiers": [["mqtt", "zigbee2mqtt_0x01"]], "connections": [["zigbee", 42]]},
 	{"id": "d2", "name": "Moon", "labels": [], "config_entries": ["E2"]}
-]`)
+]`}
 
 // readDataSource runs ds's Read with the config attrs (the others null) and returns the state.
 func readDataSource(t *testing.T, ds datasource.DataSource, attrs map[string]tftypes.Value) tfsdk.State {
+	t.Helper()
+	resp := runRead(t, ds, attrs)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("Read: %v", resp.Diagnostics)
+	}
+	return resp.State
+}
+
+// runRead runs ds's Read with the config attrs (the others null) and returns the response.
+func runRead(t *testing.T, ds datasource.DataSource, attrs map[string]tftypes.Value) datasource.ReadResponse {
 	t.Helper()
 	ctx := t.Context()
 	var s datasource.SchemaResponse
@@ -47,10 +64,7 @@ func readDataSource(t *testing.T, ds datasource.DataSource, attrs map[string]tft
 	}
 	resp := datasource.ReadResponse{State: tfsdk.State{Schema: s.Schema, Raw: tftypes.NewValue(typ, nil)}}
 	ds.Read(ctx, datasource.ReadRequest{Config: tfsdk.Config{Schema: s.Schema, Raw: tftypes.NewValue(typ, vals)}}, &resp)
-	if resp.Diagnostics.HasError() {
-		t.Fatalf("Read: %v", resp.Diagnostics)
-	}
-	return resp.State
+	return resp
 }
 
 func TestDevicesRead(t *testing.T) {

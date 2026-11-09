@@ -6,6 +6,12 @@ Breaking changes are marked **Breaking** (ADR-0018, ADR-0019).
 
 ## Unreleased
 
+- New data source `homeassistant_entity_registry` lists the entity registry
+  (`config/entity_registry/list`), including disabled entities, with `device_id`, `domain`,
+  `platform`, and `entity_category` filters. Each entry has `id`, `entity_id`, `unique_id`,
+  `platform`, `device_id`, `entity_category`, `disabled_by`, and `hidden_by`. One read and a `for`
+  expression find the primary entities of many devices (#89, #90).
+
 ## 1.1.0
 
 Supports Home Assistant 2026.6 to 2026.11. No breaking changes: state from 1.0.0 upgrades without

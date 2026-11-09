@@ -22,8 +22,8 @@ scenes, helpers, dashboards, and integrations.
   (`homeassistant_integration`), and its subentries by answering their subentry flows
   (`homeassistant_integration_subentry`), plus typed resources for ESPHome and MQTT
   (`homeassistant_esphome`, `homeassistant_mqtt`).
-- **Data sources** to look things up: entities, devices, areas, integrations, the instance config,
-  and rendered templates.
+- **Data sources** to look things up: entities, the entity registry, devices, areas, integrations,
+  the instance config, and rendered templates.
 - **Provider functions** that build dashboard cards and sections, and automation triggers,
   conditions and actions.
 - Every resource supports `tofu import`.

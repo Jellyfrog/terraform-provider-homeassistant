@@ -21,6 +21,9 @@ type EntityEntry struct {
 	Platform     string   `json:"platform"`
 	DeviceID     *string  `json:"device_id"`
 	OriginalName *string  `json:"original_name"`
+	UniqueID     string   `json:"unique_id"`
+	// EntityCategory is `config` or `diagnostic`, or nil for a primary entity.
+	EntityCategory *string `json:"entity_category"`
 }
 
 // EntityRegistry is the entity registry (`config/entity_registry/*`). Integrations create and

@@ -218,3 +218,26 @@ its entities too.
   `identifier` (list(string) of two elements) matches the devices whose `identifiers` contain
   that exact pair; it stays stable when a device is renamed. Ambiguous matches are an error. A
   configured `name` stays as given in state, even if it matched `name_by_user`.
+- `homeassistant_entity_registry` — `config/entity_registry/list`, once per read. Filters, all
+  compared exactly and applied to the list: `device_id`, `domain` (the entity ID's prefix before
+  the `.`), `platform` (the integration, e.g. `mqtt`), `entity_category` (`config` or
+  `diagnostic`). `entities` is a list of objects with `id` (the registry ID, ADR-0025),
+  `entity_id`, `unique_id`, `platform`, `device_id`, `entity_category`, `disabled_by` and
+  `hidden_by` (each null when unset), sorted by `entity_id`. Unlike `homeassistant_entities`,
+  which reads `/api/states`, it includes disabled entities and has no state or attributes.
+  `original_device_class` is not in the list (only `config/entity_registry/get` has it), so it is
+  not offered; filter on the device class with `homeassistant_entities`. With `device_id` and
+  `entity_category`, one read and a `for` expression find the primary entities of many devices
+  (issue #90):
+
+  ```hcl
+  data "homeassistant_entity_registry" "all" {}
+
+  locals {
+    primary_entities = {
+      for e in data.homeassistant_entity_registry.all.entities :
+      e.device_id => e.entity_id... if e.device_id != null && e.entity_category == null
+      && e.hidden_by == null && e.disabled_by == null
+    }
+  }
+  ```
