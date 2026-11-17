@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 // ConfigItems manages the items of one REST config editor, `/api/config/<domain>/config/<id>`:
@@ -134,6 +133,5 @@ func (c ConfigItems) FindEntity(ctx context.Context, id, known string) (string, 
 
 // inDomain reports whether entityID is in the item's domain.
 func (c ConfigItems) inDomain(entityID string) bool {
-	domain, _, _ := strings.Cut(entityID, ".")
-	return domain == c.domain
+	return EntityDomain(entityID) == c.domain
 }

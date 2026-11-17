@@ -37,11 +37,6 @@ func ptrMatches(want, got *string) bool {
 	return want == nil || (got != nil && *got == *want)
 }
 
-// inDomain reports whether entityID is in domain, the part of an entity ID before the dot.
-func inDomain(entityID, domain string) bool {
-	return strings.HasPrefix(entityID, domain+".")
-}
-
 // restClient returns the REST client from the provider data, or nil before the provider is
 // configured or on error.
 func restClient(req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) *client.RESTClient {

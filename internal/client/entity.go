@@ -5,7 +5,14 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
 )
+
+// EntityDomain returns the domain of entityID, the part before the dot.
+func EntityDomain(entityID string) string {
+	domain, _, _ := strings.Cut(entityID, ".")
+	return domain
+}
 
 // EntityEntry is an entry of the entity registry.
 type EntityEntry struct {

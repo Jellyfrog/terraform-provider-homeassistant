@@ -233,7 +233,7 @@ func (f entityFilter) apply(states []client.EntityState) []client.EntityState {
 }
 
 func (f entityFilter) matches(s client.EntityState) bool {
-	if f.domain != "" && !inDomain(s.EntityID, f.domain) {
+	if f.domain != "" && client.EntityDomain(s.EntityID) != f.domain {
 		return false
 	}
 	if f.area != nil && !f.area[s.EntityID] {

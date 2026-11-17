@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 
 	"github.com/toelke/terraform-provider-homeassistant/internal/acctest"
+	"github.com/toelke/terraform-provider-homeassistant/internal/client"
 )
 
 // TestAccEntityRegistryDataSource reads the twin devices' sensors from the entity registry: the
@@ -91,8 +92,8 @@ output "unknown_device_count" {
 					updateEntity(t, c, map[string]any{"entity_id": entityIDs[0], "disabled_by": "user"})
 					// Best effort: other tests announce the same sensor again on this instance.
 					t.Cleanup(func() {
-						_ = c.WS.Command(context.Background(), "config/entity_registry/update",
-							map[string]any{"entity_id": entityIDs[0], "disabled_by": nil}, nil)
+						_, _ = client.Entities(c.WS).Update(context.Background(), entityIDs[0],
+							map[string]any{"disabled_by": nil})
 					})
 				},
 				Config: config,

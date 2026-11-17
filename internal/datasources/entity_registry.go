@@ -156,7 +156,7 @@ func (f entityRegistryFilter) apply(entries []client.EntityEntry) []client.Entit
 
 // matches reports whether e passes every filter that is set.
 func (f entityRegistryFilter) matches(e client.EntityEntry) bool {
-	if f.domain != nil && !inDomain(e.EntityID, *f.domain) {
+	if f.domain != nil && client.EntityDomain(e.EntityID) != *f.domain {
 		return false
 	}
 	return ptrMatches(f.platform, &e.Platform) && ptrMatches(f.deviceID, e.DeviceID) &&

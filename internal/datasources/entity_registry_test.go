@@ -33,14 +33,6 @@ const testEntityRegistry = `[
 // registryEntities answers `config/entity_registry/list` with testEntityRegistry.
 var registryEntities = registryWS{typ: "config/entity_registry/list", json: testEntityRegistry}
 
-func entryIDs(entries []client.EntityEntry) []string {
-	ids := make([]string, len(entries))
-	for i, e := range entries {
-		ids[i] = e.EntityID
-	}
-	return ids
-}
-
 func TestEntityRegistryFilter(t *testing.T) {
 	var entries []client.EntityEntry
 	if err := json.Unmarshal([]byte(testEntityRegistry), &entries); err != nil {
@@ -64,7 +56,7 @@ func TestEntityRegistryFilter(t *testing.T) {
 		"every filter, no hit": {entityRegistryFilter{deviceID: str("dev_plug"), domain: str("update"), platform: str("mqtt"), entityCategory: str("config")}, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := entryIDs(tc.filter.apply(entries)); !slices.Equal(got, tc.want) {
+			if got := idsOf(tc.filter.apply(entries), func(e client.EntityEntry) string { return e.EntityID }); !slices.Equal(got, tc.want) {
 				t.Errorf("ids = %v, want %v", got, tc.want)
 			}
 		})
