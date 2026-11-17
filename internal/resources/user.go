@@ -138,7 +138,7 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 					"later; with older versions, use `password`. Because the provider cannot see a change of a " +
 					"write-only value, it sets the password when the login is created and whenever " +
 					"`password_wo_version` changes. Changing the password of an existing login needs the " +
-					"owner's token. Needs `username`.",
+					"owner's token. Needs `username` and `password_wo_version`.",
 				Optional:   true,
 				Sensitive:  true,
 				WriteOnly:  true,
@@ -146,7 +146,7 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			},
 			"password_wo_version": schema.Int64Attribute{
 				Description: "Any number that changes when `password_wo` changes, e.g. `1`, then `2`. Changing it " +
-					"sets the password from `password_wo`.",
+					"sets the password from `password_wo`. Required with `password_wo`.",
 				Optional:   true,
 				Validators: []validator.Int64{int64validator.AlsoRequires(path.MatchRoot("password_wo"))},
 			},
@@ -283,8 +283,8 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-// ModifyPlan rejects creating a login without a password, which Home Assistant needs, and warns
-// when the plan deletes a login.
+// ModifyPlan rejects creating a login without a password, which Home Assistant needs, and
+// `password_wo` without `password_wo_version`, and warns when the plan deletes a login.
 func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
@@ -298,6 +298,14 @@ func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRe
 	}
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	// The version is how an update sees that password_wo changed. Without one, nothing would set
+	// it, e.g. when switching from `password`, and the old password would stay unnoticed.
+	if !config.PasswordWO.IsNull() && plan.PasswordWOVersion.IsNull() {
+		resp.Diagnostics.AddAttributeError(path.Root("password_wo_version"), "Missing password version",
+			"`password_wo` needs `password_wo_version`. The provider cannot see the write-only password, so "+
+				"it sets the password only when the login is created or the version changes. Set "+
+				"`password_wo_version = 1`, and change it whenever `password_wo` changes.")
 	}
 	hasLogin := !state.Username.IsNull()
 	switch {

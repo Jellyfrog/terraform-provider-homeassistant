@@ -15,8 +15,8 @@ Commands: `config/auth/list|create|update|delete` (key `user_id`), and for the l
 | `name` | string, required | Display name |
 | `username` | string, optional | Login name. Lowercase, no spaces at the start or end (HA rejects others) |
 | `password` | string, optional, sensitive | Kept in state, like the secrets of `homeassistant_mqtt`. Works from 1.8 (ADR-0016). Needs `username`; conflicts with `password_wo` |
-| `password_wo` | string, optional, sensitive, write-only | Never in plan or state. Needs OpenTofu/Terraform ≥ 1.11; older clients get the framework's "WriteOnly Attribute Not Allowed" error when it is set. Needs `username` |
-| `password_wo_version` | number, optional | Changing it sets the password from `password_wo`. Needs `password_wo` |
+| `password_wo` | string, optional, sensitive, write-only | Never in plan or state. Needs OpenTofu/Terraform ≥ 1.11; older clients get the framework's "WriteOnly Attribute Not Allowed" error when it is set. Needs `username` and `password_wo_version` |
+| `password_wo_version` | number, optional | Changing it sets the password from `password_wo`. Needs, and is needed by, `password_wo` |
 | `group` | string, default `user` | `admin`, `user` or `read-only`: the system groups `system-admin`, `system-users`, `system-read-only` |
 | `is_active` | bool, default `true` | Whether the user can log in |
 | `local_only` | bool, default `false` | Whether the user can log in only from the local network |
@@ -27,8 +27,8 @@ Commands: `config/auth/list|create|update|delete` (key `user_id`), and for the l
   If a follow-up call fails, the user is deleted again, even if the context was cancelled.
 - **Password:** creating a login needs `password` or `password_wo` (read from the config, since
   a write-only value is null in the plan). Without either, an existing login keeps its password.
-  Switching from `password` to `password_wo` (with a version) sets the password and removes it
-  from state.
+  Switching from `password` to `password_wo` sets the password, as the version goes from null to
+  a number, and removes it from state.
 - **Read:** `config/auth/list`, find by ID. Missing → remove from state. `username` is the login
   name of the user's `homeassistant` credentials, or null. The password cannot be read: it stays
   as in state while the user has a login, and is null otherwise. `password_wo_version` stays as in
@@ -50,7 +50,9 @@ Commands: `config/auth/list|create|update|delete` (key `user_id`), and for the l
 - **Delete:** `config/auth/delete`, which also deletes the login. A user that is already gone is
   not an error. HA unlinks it from its person.
 - **Plan:** creating a login (on a new user, or one without a login) without `password` or
-  `password_wo` is an error. A plan that deletes a login warns, naming the username: after an import, a
+  `password_wo` is an error, and so is `password_wo` without `password_wo_version`: without a
+  version, nothing tells an update that the password changed, so switching from `password` would
+  keep the old password quietly. A plan that deletes a login warns, naming the username: after an import, a
   configuration without `username` would otherwise delete the login quietly.
 - **Import:** by ID or by username; an ID match wins. A configuration that `-generate-config-out`
   writes has `password = null`, which is valid: the password stays as it is.

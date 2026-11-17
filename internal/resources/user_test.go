@@ -503,6 +503,18 @@ func TestUserModifyPlanAcceptsWriteOnlyPassword(t *testing.T) {
 	checkDiags(t, modifyUserPlan(t, nil, withWO(jane(), "wo-secret", 1)).Diagnostics, "")
 }
 
+// Without a version, an update cannot see password_wo, so switching from password would keep the
+// old one: the plan requires the version, on a new user and on an existing one.
+func TestUserModifyPlanNeedsWriteOnlyPasswordVersion(t *testing.T) {
+	noVersion := withWO(jane(), "wo-secret", 1)
+	noVersion.PasswordWOVersion = types.Int64Null()
+	withPassword := jane()
+	withPassword.ID = types.StringValue("u1")
+	noVersion.ID = withPassword.ID
+	checkDiags(t, modifyUserPlan(t, nil, noVersion).Diagnostics, "needs `password_wo_version`")
+	checkDiags(t, modifyUserPlan(t, &withPassword, noVersion).Diagnostics, "needs `password_wo_version`")
+}
+
 func TestUserCreateUndoneWhenCancelled(t *testing.T) {
 	for _, step := range []string{"config/auth/update", cmdCreateLogin} {
 		t.Run(step, func(t *testing.T) {
