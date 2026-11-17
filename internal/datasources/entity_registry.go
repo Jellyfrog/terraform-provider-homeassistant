@@ -94,7 +94,7 @@ func (d *entityRegistryDataSource) Schema(_ context.Context, _ datasource.Schema
 					"id":        computed("Registry ID. Unlike the entity ID, a rename does not change it."),
 					"entity_id": computed("Entity ID."),
 					"unique_id": computed("ID the integration gave the entity, unique within the " +
-						"integration."),
+						"integration and the domain."),
 					"platform":  computed("Integration that provides the entity, e.g. `mqtt`."),
 					"device_id": computed("ID of the entity's device; null if it belongs to none."),
 					"entity_category": computed("`config` or `diagnostic`; null for a primary " +

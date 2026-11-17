@@ -68,4 +68,4 @@ Read-Only:
 - `hidden_by` (String) Who hid the entity, e.g. `user` or `integration`; null if it is visible.
 - `id` (String) Registry ID. Unlike the entity ID, a rename does not change it.
 - `platform` (String) Integration that provides the entity, e.g. `mqtt`.
-- `unique_id` (String) ID the integration gave the entity, unique within the integration.
+- `unique_id` (String) ID the integration gave the entity, unique within the integration and the domain.
