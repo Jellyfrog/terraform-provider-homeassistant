@@ -64,8 +64,7 @@ func (d *entityRegistryDataSource) Schema(_ context.Context, _ datasource.Schema
 	}
 	resp.Schema = schema.Schema{
 		Description: "Lists the entries of the entity registry that match every filter that is set " +
-			"(`config/entity_registry/list`). Without filters, it lists every entry; a filter set " +
-			"to `\"\"` counts as unset. Unlike " +
+			"(`config/entity_registry/list`). Without filters, it lists every entry. Unlike " +
 			"`homeassistant_entities`, it includes disabled entities, and it has no state or " +
 			"attributes. Filters compare exactly.",
 		Attributes: map[string]schema.Attribute{
@@ -130,10 +129,10 @@ func (d *entityRegistryDataSource) Read(ctx context.Context, req datasource.Read
 		return
 	}
 	f := entityRegistryFilter{
-		deviceID:       filterValue(cfg.DeviceID),
-		domain:         filterValue(cfg.Domain),
-		platform:       filterValue(cfg.Platform),
-		entityCategory: filterValue(cfg.EntityCategory),
+		deviceID:       cfg.DeviceID.ValueStringPointer(),
+		domain:         cfg.Domain.ValueStringPointer(),
+		platform:       cfg.Platform.ValueStringPointer(),
+		entityCategory: cfg.EntityCategory.ValueStringPointer(),
 	}
 	matched := f.apply(entries)
 	cfg.Entities = make([]entityRegistryEntry, len(matched))
@@ -141,17 +140,6 @@ func (d *entityRegistryDataSource) Read(ctx context.Context, req datasource.Read
 		cfg.Entities[i] = newEntityRegistryEntry(e)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, cfg)...)
-}
-
-// filterValue returns the value of a filter attribute, or nil if it is null or empty. An empty
-// filter doesn't filter, as `domain = ""` on `homeassistant_entities`, so a module can pass a
-// variable that defaults to "". (`homeassistant_entities` and `homeassistant_devices` don't
-// apply this to their other filters.)
-func filterValue(v types.String) *string {
-	if v.ValueString() == "" {
-		return nil
-	}
-	return v.ValueStringPointer()
 }
 
 // entityRegistryFilter holds the filters of the entity registry data source. Nil fields don't

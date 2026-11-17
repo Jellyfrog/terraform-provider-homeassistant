@@ -3,12 +3,12 @@
 page_title: "homeassistant_entity_registry Data Source - homeassistant"
 subcategory: ""
 description: |-
-  Lists the entries of the entity registry that match every filter that is set (config/entity_registry/list). Without filters, it lists every entry; a filter set to "" counts as unset. Unlike homeassistant_entities, it includes disabled entities, and it has no state or attributes. Filters compare exactly.
+  Lists the entries of the entity registry that match every filter that is set (config/entity_registry/list). Without filters, it lists every entry. Unlike homeassistant_entities, it includes disabled entities, and it has no state or attributes. Filters compare exactly.
 ---
 
 # homeassistant_entity_registry (Data Source)
 
-Lists the entries of the entity registry that match every filter that is set (`config/entity_registry/list`). Without filters, it lists every entry; a filter set to `""` counts as unset. Unlike `homeassistant_entities`, it includes disabled entities, and it has no state or attributes. Filters compare exactly.
+Lists the entries of the entity registry that match every filter that is set (`config/entity_registry/list`). Without filters, it lists every entry. Unlike `homeassistant_entities`, it includes disabled entities, and it has no state or attributes. Filters compare exactly.
 
 ## Example Usage
 

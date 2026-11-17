@@ -50,12 +50,6 @@ output "first_primary" {
 output "second_has_primary" {
   value = contains(keys(local.primary), %[2]q)
 }
-
-output "unknown_device_count" {
-  value = length([
-    for e in data.homeassistant_entity_registry.all.entities : e if e.device_id == "acc_no_such_device"
-  ])
-}
 `, deviceIDs[0], deviceIDs[1])
 	first := "data.homeassistant_entity_registry.first"
 	second := "data.homeassistant_entity_registry.second"
@@ -80,13 +74,16 @@ output "unknown_device_count" {
 					resource.TestCheckResourceAttr(second, "entities.0.entity_category", "diagnostic"),
 					resource.TestCheckOutput("first_primary", fmt.Sprintf("[%q]", entityIDs[0])),
 					resource.TestCheckOutput("second_has_primary", "false"),
-					resource.TestCheckOutput("unknown_device_count", "0"),
 				),
 			},
 			{
 				PreConfig: func() {
 					c := entitiesClient(t)
 					updateEntity(t, c, map[string]any{"entity_id": entityIDs[0], "disabled_by": "user"})
+					// Re-enable it, so a rerun against the same instance doesn't find it disabled.
+					t.Cleanup(func() {
+						updateEntity(t, c, map[string]any{"entity_id": entityIDs[0], "disabled_by": nil})
+					})
 				},
 				Config: config,
 				Check: resource.ComposeAggregateTestCheckFunc(

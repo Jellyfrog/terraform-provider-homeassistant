@@ -101,14 +101,16 @@ func TestEntityRegistryRead(t *testing.T) {
 	}
 }
 
-// TestEntityRegistryReadEmptyFilters checks that filters set to "" don't filter.
+// TestEntityRegistryReadEmptyFilters checks that a filter set to "" compares exactly, as on
+// homeassistant_devices: it matches no entry, not even one whose value is null.
 func TestEntityRegistryReadEmptyFilters(t *testing.T) {
-	empty := tftypes.NewValue(tftypes.String, "")
-	got := readEntityRegistry(t, map[string]tftypes.Value{
-		"device_id": empty, "domain": empty, "platform": empty, "entity_category": empty,
-	})
-	if len(got.Entities) != 5 {
-		t.Errorf("entities = %v, want all 5", got.Entities)
+	for _, attr := range []string{"device_id", "domain", "platform", "entity_category"} {
+		t.Run(attr, func(t *testing.T) {
+			got := readEntityRegistry(t, map[string]tftypes.Value{attr: tftypes.NewValue(tftypes.String, "")})
+			if len(got.Entities) != 0 {
+				t.Errorf("entities = %v, want none", got.Entities)
+			}
+		})
 	}
 }
 
