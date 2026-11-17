@@ -13,7 +13,7 @@ Commands: `config/auth/list|create|update|delete` (key `user_id`), and for the l
 |---|---|---|
 | `id` | string, computed | Random hex ID that HA assigns |
 | `name` | string, required | Display name |
-| `username` | string, optional | Login name. Lowercase, no spaces at the start or end (HA rejects others) |
+| `username` | string, optional | Login name. Lowercase, no spaces at the start or end (HA rejects others), unless it is the username in state: older HA versions stored usernames like `Jane`, which import reads as they are |
 | `password` | string, optional, sensitive | Kept in state, like the secrets of `homeassistant_mqtt`. Works from 1.8 (ADR-0016). Needs `username`; conflicts with `password_wo` |
 | `password_wo` | string, optional, sensitive, write-only | Never in plan or state. Needs OpenTofu/Terraform ≥ 1.11; older clients get the framework's "WriteOnly Attribute Not Allowed" error when it is set. Needs `username` and `password_wo_version` |
 | `password_wo_version` | number, optional | Changing it sets the password from `password_wo`. Needs, and is needed by, `password_wo` |
@@ -50,7 +50,8 @@ Commands: `config/auth/list|create|update|delete` (key `user_id`), and for the l
 - **Delete:** `config/auth/delete`, which also deletes the login. A user that is already gone is
   not an error. HA unlinks it from its person.
 - **Plan:** creating a login (on a new user, or one without a login) without `password` or
-  `password_wo` is an error, and so is `password_wo` without `password_wo_version`: without a
+  `password_wo` is an error, and so is a `username` that HA would reject, unless it is the one in
+  state (checked here, as a validator cannot see the state), and `password_wo` without `password_wo_version`: without a
   version, nothing tells an update that the password changed, so switching from `password` would
   keep the old password quietly. A plan that deletes a login warns, naming the username: after an import, a
   configuration without `username` would otherwise delete the login quietly.

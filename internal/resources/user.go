@@ -109,14 +109,12 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			},
 			"username": schema.StringAttribute{
 				Description: "Username to log in with. It must be lowercase and have no spaces at the start or " +
-					"end. Without it, the user has no password login. Removing it from the configuration " +
+					"end, unless it is the username the login already has, e.g. one that an older Home " +
+					"Assistant stored and that was imported. Without it, the user has no password login. Removing it from the configuration " +
 					"deletes the login; the plan warns about it. Changing it renames the login in place and " +
 					"needs the owner's token. Creating a login needs `password` or `password_wo`.",
-				Optional: true,
-				Validators: []validator.String{
-					stringvalidator.LengthAtLeast(1),
-					usernameValidator{},
-				},
+				Optional:   true,
+				Validators: []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"password": schema.StringAttribute{
 				Description: "Password to log in with. It is kept in the state, so protect the state. Home " +
@@ -173,31 +171,11 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 	}
 }
 
-// usernameValidator accepts usernames that Home Assistant stores unchanged: it rejects new
-// usernames that are not lowercase or have spaces at the start or end.
-type usernameValidator struct{}
-
-var _ validator.String = usernameValidator{}
-
-func (usernameValidator) Description(context.Context) string {
-	return "must be lowercase, without spaces at the start or end"
-}
-
-func (v usernameValidator) MarkdownDescription(ctx context.Context) string {
-	return v.Description(ctx)
-}
-
-func (v usernameValidator) ValidateString(ctx context.Context, req validator.StringRequest, resp *validator.StringResponse) {
-	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
-		return
-	}
-	s := req.ConfigValue.ValueString()
-	// Home Assistant requires username == username.strip().casefold(); Unicode case folding is
-	// what Python's casefold does, e.g. "ß" becomes "ss", which lowercasing keeps.
-	if strings.TrimSpace(s) != s || cases.Fold().String(s) != s {
-		resp.Diagnostics.AddAttributeError(req.Path, "Invalid Attribute Value",
-			fmt.Sprintf("Attribute %s %s, got: %q", req.Path, v.Description(ctx), s))
-	}
+// normalizedUsername reports whether Home Assistant stores the username unchanged. It requires
+// username == username.strip().casefold(); Unicode case folding is what Python's casefold does,
+// e.g. "ß" becomes "ss", which lowercasing keeps.
+func normalizedUsername(s string) bool {
+	return strings.TrimSpace(s) == s && cases.Fold().String(s) == s
 }
 
 func (r *userResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -283,8 +261,9 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-// ModifyPlan rejects creating a login without a password, which Home Assistant needs, and
-// `password_wo` without `password_wo_version`, and warns when the plan deletes a login.
+// ModifyPlan rejects creating a login without a password, which Home Assistant needs, a new
+// username that Home Assistant would reject, and `password_wo` without `password_wo_version`, and
+// warns when the plan deletes a login.
 func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
@@ -306,6 +285,14 @@ func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRe
 			"`password_wo` needs `password_wo_version`. The provider cannot see the write-only password, so "+
 				"it sets the password only when the login is created or the version changes. Set "+
 				"`password_wo_version = 1`, and change it whenever `password_wo` changes.")
+	}
+	// Checked here, not by a validator, because a username that an older Home Assistant stored
+	// unnormalized, e.g. "Jane", must stay valid: leaving it out would delete the login, and
+	// changing it would be a rename that needs the owner's token.
+	if u := plan.Username; !u.IsNull() && !u.IsUnknown() && !u.Equal(state.Username) && !normalizedUsername(u.ValueString()) {
+		resp.Diagnostics.AddAttributeError(path.Root("username"), "Invalid Attribute Value",
+			fmt.Sprintf("Attribute username must be lowercase, without spaces at the start or end, got: %q",
+				u.ValueString()))
 	}
 	hasLogin := !state.Username.IsNull()
 	switch {

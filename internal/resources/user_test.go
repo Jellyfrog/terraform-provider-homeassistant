@@ -9,7 +9,6 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -356,14 +355,29 @@ func TestUserImport(t *testing.T) {
 	}
 }
 
-func TestUsernameValidator(t *testing.T) {
+func TestNormalizedUsername(t *testing.T) {
 	for s, ok := range map[string]bool{"jane": true, "jane.doe@x": true, "Jane": false, " jane": false, "jane ": false, "straße": false} {
-		var resp validator.StringResponse
-		usernameValidator{}.ValidateString(t.Context(), validator.StringRequest{ConfigValue: types.StringValue(s)}, &resp)
-		if resp.Diagnostics.HasError() == ok {
-			t.Errorf("%q: errors %v, want ok = %v", s, resp.Diagnostics, ok)
+		if normalizedUsername(s) != ok {
+			t.Errorf("%q: got %v, want %v", s, !ok, ok)
 		}
 	}
+}
+
+// A new username must be one Home Assistant accepts, but one the login already has stays valid:
+// older versions stored usernames like "Jane", which import reads as they are.
+func TestUserModifyPlanUsername(t *testing.T) {
+	withUsername := func(username string) userModel {
+		m := jane()
+		m.ID, m.Username = types.StringValue("u1"), types.StringValue(username)
+		return m
+	}
+	const invalid = "must be lowercase"
+	imported, noLogin := withUsername("Jane"), withoutLogin(withUsername("jane"))
+	checkDiags(t, modifyUserPlan(t, nil, withUsername("Jane")).Diagnostics, invalid)
+	checkDiags(t, modifyUserPlan(t, &noLogin, withUsername("Jane")).Diagnostics, invalid)
+	checkDiags(t, modifyUserPlan(t, &imported, withUsername("Jane")).Diagnostics, "")
+	checkDiags(t, modifyUserPlan(t, &imported, withUsername("jane")).Diagnostics, "")
+	checkDiags(t, modifyUserPlan(t, &imported, withUsername("Janet")).Diagnostics, invalid)
 }
 
 func modifyUserPlan(t *testing.T, state *userModel, plan userModel) resource.ModifyPlanResponse {
