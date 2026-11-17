@@ -220,8 +220,9 @@ its entities too.
   configured `name` stays as given in state, even if it matched `name_by_user`.
 - `homeassistant_entity_registry` — `config/entity_registry/list`, once per read. Filters, all
   compared exactly and applied to the list: `device_id`, `domain` (the entity ID's prefix before
-  the `.`), `platform` (the integration, e.g. `mqtt`), `entity_category` (`config` or
-  `diagnostic`). `entities` is a list of objects with `id` (the registry ID, ADR-0025),
+  the `.`), `platform` (the integration, e.g. `mqtt`), `entity_category` (any value, e.g.
+  `config` or `diagnostic`, so categories HA adds later work too). A filter set to `""` doesn't filter, as `domain = ""` on
+  `homeassistant_entities`. `entities` is a list of objects with `id` (the registry ID, ADR-0025),
   `entity_id`, `unique_id`, `platform`, `device_id`, `entity_category`, `disabled_by` and
   `hidden_by` (each null when unset), sorted by `entity_id`. Unlike `homeassistant_entities`,
   which reads `/api/states`, it includes disabled entities and has no state or attributes.

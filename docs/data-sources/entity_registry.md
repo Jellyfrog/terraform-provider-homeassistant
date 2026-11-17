@@ -3,12 +3,12 @@
 page_title: "homeassistant_entity_registry Data Source - homeassistant"
 subcategory: ""
 description: |-
-  Lists the entries of the entity registry that match every filter that is set (config/entity_registry/list). Without filters, it lists every entry. Unlike homeassistant_entities, it includes disabled entities, and it has no state or attributes. Filters compare exactly.
+  Lists the entries of the entity registry that match every filter that is set (config/entity_registry/list). Without filters, it lists every entry; a filter set to "" counts as unset. Unlike homeassistant_entities, it includes disabled entities, and it has no state or attributes. Filters compare exactly.
 ---
 
 # homeassistant_entity_registry (Data Source)
 
-Lists the entries of the entity registry that match every filter that is set (`config/entity_registry/list`). Without filters, it lists every entry. Unlike `homeassistant_entities`, it includes disabled entities, and it has no state or attributes. Filters compare exactly.
+Lists the entries of the entity registry that match every filter that is set (`config/entity_registry/list`). Without filters, it lists every entry; a filter set to `""` counts as unset. Unlike `homeassistant_entities`, it includes disabled entities, and it has no state or attributes. Filters compare exactly.
 
 ## Example Usage
 
@@ -49,7 +49,7 @@ output "hacs_update_entities" {
 
 - `device_id` (String) Only entities of the device with this ID.
 - `domain` (String) Only entities of this domain, e.g. `light`.
-- `entity_category` (String) Only entities of this category: `config` or `diagnostic`.
+- `entity_category` (String) Only entities of this category, e.g. `config` or `diagnostic`. Any value is accepted, so categories that HA adds later work too. To select primary entities (no category), filter `entities` on `entity_category == null`.
 - `platform` (String) Only entities of this integration, e.g. `mqtt`.
 
 ### Read-Only

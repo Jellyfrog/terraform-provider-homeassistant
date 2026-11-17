@@ -101,19 +101,25 @@ func TestEntityRegistryFind(t *testing.T) {
 	}
 }
 
-// TestEntityRegistryListNumericUniqueID checks that a numeric unique ID, which HA keeps for
-// integrations that reported one, is read as a string instead of failing the whole list.
-func TestEntityRegistryListNumericUniqueID(t *testing.T) {
+// TestEntityRegistryListUniqueID checks that a numeric unique ID, which HA keeps for
+// integrations that reported one, is read as a string, and a null one as nil, instead of failing
+// the whole list.
+func TestEntityRegistryListUniqueID(t *testing.T) {
 	entities := Entities(fakeWS{"config/entity_registry/list": fixed(`[
 		{"id": "abc", "entity_id": "sensor.legacy", "platform": "legacy", "unique_id": 1234},
-		{"id": "def", "entity_id": "sensor.moon_phase", "platform": "moon", "unique_id": "phase"}
+		{"id": "def", "entity_id": "sensor.moon_phase", "platform": "moon", "unique_id": "phase"},
+		{"id": "ghi", "entity_id": "sensor.orphan", "platform": "old", "unique_id": null}
 	]`)})
 
 	got, err := entities.List(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].UniqueID != "1234" || got[1].UniqueID != "phase" {
+	var ids []*string
+	for _, e := range got {
+		ids = append(ids, e.UniqueID.StringPointer())
+	}
+	if len(ids) != 3 || ids[0] == nil || *ids[0] != "1234" || ids[1] == nil || *ids[1] != "phase" || ids[2] != nil {
 		t.Errorf("List = %+v", got)
 	}
 }

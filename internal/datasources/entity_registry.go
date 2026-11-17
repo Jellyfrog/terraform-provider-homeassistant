@@ -3,10 +3,8 @@ package datasources
 import (
 	"context"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/toelke/terraform-provider-homeassistant/internal/client"
@@ -47,7 +45,7 @@ func newEntityRegistryEntry(e client.EntityEntry) entityRegistryEntry {
 	return entityRegistryEntry{
 		ID:             types.StringValue(e.ID),
 		EntityID:       types.StringValue(e.EntityID),
-		UniqueID:       types.StringValue(string(e.UniqueID)),
+		UniqueID:       types.StringPointerValue(e.UniqueID.StringPointer()),
 		Platform:       types.StringValue(e.Platform),
 		DeviceID:       types.StringPointerValue(e.DeviceID),
 		EntityCategory: types.StringPointerValue(e.EntityCategory),
@@ -66,7 +64,8 @@ func (d *entityRegistryDataSource) Schema(_ context.Context, _ datasource.Schema
 	}
 	resp.Schema = schema.Schema{
 		Description: "Lists the entries of the entity registry that match every filter that is set " +
-			"(`config/entity_registry/list`). Without filters, it lists every entry. Unlike " +
+			"(`config/entity_registry/list`). Without filters, it lists every entry; a filter set " +
+			"to `\"\"` counts as unset. Unlike " +
 			"`homeassistant_entities`, it includes disabled entities, and it has no state or " +
 			"attributes. Filters compare exactly.",
 		Attributes: map[string]schema.Attribute{
@@ -83,9 +82,10 @@ func (d *entityRegistryDataSource) Schema(_ context.Context, _ datasource.Schema
 				Optional:    true,
 			},
 			"entity_category": schema.StringAttribute{
-				Description: "Only entities of this category: `config` or `diagnostic`.",
-				Optional:    true,
-				Validators:  []validator.String{stringvalidator.OneOf("config", "diagnostic")},
+				Description: "Only entities of this category, e.g. `config` or `diagnostic`. Any " +
+					"value is accepted, so categories that HA adds later work too. To select " +
+					"primary entities (no category), filter `entities` on `entity_category == null`.",
+				Optional: true,
 			},
 			"entities": schema.ListNestedAttribute{
 				Description: "The matching entries, sorted by `entity_id`.",
@@ -130,10 +130,10 @@ func (d *entityRegistryDataSource) Read(ctx context.Context, req datasource.Read
 		return
 	}
 	f := entityRegistryFilter{
-		deviceID:       cfg.DeviceID.ValueStringPointer(),
-		domain:         cfg.Domain.ValueStringPointer(),
-		platform:       cfg.Platform.ValueStringPointer(),
-		entityCategory: cfg.EntityCategory.ValueStringPointer(),
+		deviceID:       filterValue(cfg.DeviceID),
+		domain:         filterValue(cfg.Domain),
+		platform:       filterValue(cfg.Platform),
+		entityCategory: filterValue(cfg.EntityCategory),
 	}
 	matched := f.apply(entries)
 	cfg.Entities = make([]entityRegistryEntry, len(matched))
@@ -141,6 +141,16 @@ func (d *entityRegistryDataSource) Read(ctx context.Context, req datasource.Read
 		cfg.Entities[i] = newEntityRegistryEntry(e)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, cfg)...)
+}
+
+// filterValue returns the value of a filter attribute, or nil if it is null or empty: like
+// `domain = ""` on `homeassistant_entities`, an empty filter doesn't filter, so a module can pass
+// a variable that defaults to "".
+func filterValue(v types.String) *string {
+	if v.ValueString() == "" {
+		return nil
+	}
+	return v.ValueStringPointer()
 }
 
 // entityRegistryFilter holds the filters of the entity registry data source. Nil fields don't

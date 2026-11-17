@@ -288,11 +288,29 @@ func checkEntityIDs(name string, ids ...string) resource.TestCheckFunc {
 	return resource.ComposeAggregateTestCheckFunc(checks...)
 }
 
-// setUpTwinDevices starts an MQTT broker, sets up the MQTT integration, and announces two devices
-// through MQTT discovery. Both are named "Acc Twin" and have one sensor named "Temperature", so
-// the sensors share the friendly name "Acc Twin Temperature". The second sensor has the entity
-// category `diagnostic`, the first none. It returns the device IDs and the IDs of their sensors.
+// setUpTwinDevices announces two devices through MQTT discovery (setUpMQTTSensors). Both are named
+// "Acc Twin" and have one sensor named "Temperature", so the sensors share the friendly name
+// "Acc Twin Temperature". It returns the device IDs and the IDs of their sensors.
 func setUpTwinDevices(t *testing.T) (deviceIDs, entityIDs [2]string) {
+	t.Helper()
+	devices, entities := setUpMQTTSensors(t,
+		mqttSensor{id: "acc_twin_one", device: "Acc Twin"},
+		mqttSensor{id: "acc_twin_two", device: "Acc Twin"},
+	)
+	return [2]string(devices), [2]string(entities)
+}
+
+// mqttSensor is a temperature sensor named "Temperature" that MQTT discovery announces on a
+// device of its own. id is the device identifier and the prefix of the sensor's unique ID
+// (id + "_temperature"); device is the device name, and category the entity category, if any.
+type mqttSensor struct {
+	id, device, category string
+}
+
+// setUpMQTTSensors starts an MQTT broker, sets up the MQTT integration, and announces sensors
+// through MQTT discovery. It returns the IDs of their devices and the IDs of the sensors, in
+// order.
+func setUpMQTTSensors(t *testing.T, sensors ...mqttSensor) (deviceIDs, entityIDs []string) {
 	t.Helper()
 	ha := acctest.SharedInstance(t)
 	acctest.StartMosquitto(t)
@@ -317,15 +335,18 @@ func setUpTwinDevices(t *testing.T) (deviceIDs, entityIDs [2]string) {
 
 	devices := client.Devices(c.WS)
 	registry := client.Entities(c.WS)
-	for i, id := range []string{"acc_twin_one", "acc_twin_two"} {
+	deviceIDs = make([]string, len(sensors))
+	entityIDs = make([]string, len(sensors))
+	for i, sensor := range sensors {
+		id := sensor.id
 		topic := "homeassistant/sensor/" + id + "/config"
 		discovery := map[string]any{
 			"name": "Temperature", "unique_id": id + "_temperature", "state_topic": id + "/temperature",
 			"device_class": "temperature", "unit_of_measurement": "°C",
-			"device": map[string]any{"identifiers": []string{id}, "name": "Acc Twin"},
+			"device": map[string]any{"identifiers": []string{id}, "name": sensor.device},
 		}
-		if i == 1 {
-			discovery["entity_category"] = "diagnostic"
+		if sensor.category != "" {
+			discovery["entity_category"] = sensor.category
 		}
 		config, err := json.Marshal(discovery)
 		must(err)
