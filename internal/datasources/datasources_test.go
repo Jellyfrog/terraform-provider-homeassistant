@@ -38,6 +38,15 @@ func readDataSource(t *testing.T, ds datasource.DataSource, attrs map[string]tft
 	return resp.State
 }
 
+// pluck returns key of each item, in order.
+func pluck[T any](items []T, key func(T) string) []string {
+	out := make([]string, len(items))
+	for i, item := range items {
+		out[i] = key(item)
+	}
+	return out
+}
+
 // runRead runs ds's Read with the config attrs (the others null) and returns the response.
 func runRead(t *testing.T, ds datasource.DataSource, attrs map[string]tftypes.Value) datasource.ReadResponse {
 	t.Helper()

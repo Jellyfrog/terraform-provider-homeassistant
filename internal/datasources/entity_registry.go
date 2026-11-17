@@ -143,9 +143,10 @@ func (d *entityRegistryDataSource) Read(ctx context.Context, req datasource.Read
 	resp.Diagnostics.Append(resp.State.Set(ctx, cfg)...)
 }
 
-// filterValue returns the value of a filter attribute, or nil if it is null or empty: like
-// `domain = ""` on `homeassistant_entities`, an empty filter doesn't filter, so a module can pass
-// a variable that defaults to "".
+// filterValue returns the value of a filter attribute, or nil if it is null or empty. An empty
+// filter doesn't filter, as `domain = ""` on `homeassistant_entities`, so a module can pass a
+// variable that defaults to "". (`homeassistant_entities` and `homeassistant_devices` don't
+// apply this to their other filters.)
 func filterValue(v types.String) *string {
 	if v.ValueString() == "" {
 		return nil

@@ -33,14 +33,6 @@ const testEntityRegistry = `[
 // registryEntities answers `config/entity_registry/list` with testEntityRegistry.
 var registryEntities = registryWS{typ: "config/entity_registry/list", json: testEntityRegistry}
 
-func entryIDs(entries []client.EntityEntry) []string {
-	ids := make([]string, len(entries))
-	for i, e := range entries {
-		ids[i] = e.EntityID
-	}
-	return ids
-}
-
 func TestEntityRegistryFilter(t *testing.T) {
 	var entries []client.EntityEntry
 	if err := json.Unmarshal([]byte(testEntityRegistry), &entries); err != nil {
@@ -64,22 +56,28 @@ func TestEntityRegistryFilter(t *testing.T) {
 		"every filter, no hit": {entityRegistryFilter{deviceID: str("dev_plug"), domain: str("update"), platform: str("mqtt"), entityCategory: str("config")}, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := entryIDs(tc.filter.apply(entries)); !slices.Equal(got, tc.want) {
+			if got := pluck(tc.filter.apply(entries), func(e client.EntityEntry) string { return e.EntityID }); !slices.Equal(got, tc.want) {
 				t.Errorf("ids = %v, want %v", got, tc.want)
 			}
 		})
 	}
 }
 
-// TestEntityRegistryRead reads the plug's entities end to end against a fake WebSocket.
-func TestEntityRegistryRead(t *testing.T) {
+// readEntityRegistry reads the data source with the config attrs against testEntityRegistry and
+// returns the state.
+func readEntityRegistry(t *testing.T, attrs map[string]tftypes.Value) entityRegistryModel {
+	t.Helper()
 	ds := &entityRegistryDataSource{registry: client.Entities(registryEntities)}
-	state := readDataSource(t, ds, map[string]tftypes.Value{"device_id": tftypes.NewValue(tftypes.String, "dev_plug")})
-
 	var got entityRegistryModel
-	if diags := state.Get(t.Context(), &got); diags.HasError() {
+	if diags := readDataSource(t, ds, attrs).Get(t.Context(), &got); diags.HasError() {
 		t.Fatal(diags)
 	}
+	return got
+}
+
+// TestEntityRegistryRead reads the plug's entities end to end against a fake WebSocket.
+func TestEntityRegistryRead(t *testing.T) {
+	got := readEntityRegistry(t, map[string]tftypes.Value{"device_id": tftypes.NewValue(tftypes.String, "dev_plug")})
 	s, null := types.StringValue, types.StringNull()
 	want := []entityRegistryEntry{
 		{
@@ -105,16 +103,10 @@ func TestEntityRegistryRead(t *testing.T) {
 
 // TestEntityRegistryReadEmptyFilters checks that filters set to "" don't filter.
 func TestEntityRegistryReadEmptyFilters(t *testing.T) {
-	ds := &entityRegistryDataSource{registry: client.Entities(registryEntities)}
 	empty := tftypes.NewValue(tftypes.String, "")
-	state := readDataSource(t, ds, map[string]tftypes.Value{
+	got := readEntityRegistry(t, map[string]tftypes.Value{
 		"device_id": empty, "domain": empty, "platform": empty, "entity_category": empty,
 	})
-
-	var got entityRegistryModel
-	if diags := state.Get(t.Context(), &got); diags.HasError() {
-		t.Fatal(diags)
-	}
 	if len(got.Entities) != 5 {
 		t.Errorf("entities = %v, want all 5", got.Entities)
 	}

@@ -115,11 +115,15 @@ func TestEntityRegistryListUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ids []*string
+	var ids []string
 	for _, e := range got {
-		ids = append(ids, e.UniqueID.StringPointer())
+		id := "<nil>"
+		if e.UniqueID != nil {
+			id = string(*e.UniqueID)
+		}
+		ids = append(ids, id)
 	}
-	if len(ids) != 3 || ids[0] == nil || *ids[0] != "1234" || ids[1] == nil || *ids[1] != "phase" || ids[2] != nil {
-		t.Errorf("List = %+v", got)
+	if want := []string{"1234", "phase", "<nil>"}; !slices.Equal(ids, want) {
+		t.Errorf("unique IDs = %q, want %q", ids, want)
 	}
 }

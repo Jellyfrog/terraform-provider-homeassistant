@@ -21,14 +21,6 @@ var testStates = []client.EntityState{
 	{EntityID: "sensor.nameless", Attributes: json.RawMessage(`{"device_class":5}`)},
 }
 
-func entityIDs(states []client.EntityState) []string {
-	ids := make([]string, len(states))
-	for i, s := range states {
-		ids[i] = s.EntityID
-	}
-	return ids
-}
-
 func TestEntityFilter(t *testing.T) {
 	for name, tc := range map[string]struct {
 		filter entityFilter
@@ -77,7 +69,7 @@ func TestEntityFilter(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got := entityIDs(tc.filter.apply(testStates))
+			got := pluck(tc.filter.apply(testStates), func(s client.EntityState) string { return s.EntityID })
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("got %v, want %v", got, tc.want)
 			}
