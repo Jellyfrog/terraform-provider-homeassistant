@@ -21,8 +21,11 @@ func TestUsers(t *testing.T) {
 	u := NewUsers(f)
 
 	got, ok, err := u.Get(t.Context(), "u2")
-	want := User{ID: "u2", Username: ptr("jane"), Name: "Jane", LocalOnly: true, GroupIDs: []string{GroupUser}}
-	if err != nil || !ok || !reflect.DeepEqual(got, want) {
+	want := User{
+		ID: "u2", Username: new("jane"), Name: "Jane", LocalOnly: true, GroupIDs: []string{GroupUser},
+		Credentials: []Credential{{Type: "homeassistant"}},
+	}
+	if err != nil || !ok || !reflect.DeepEqual(got, want) || got.Logins() != 1 {
 		t.Fatalf("Get = %+v, %v, %v; want %+v", got, ok, err, want)
 	}
 	created, err := u.Create(t.Context(), map[string]any{"name": "Kid", "group_ids": []string{GroupReadOnly}})
@@ -69,8 +72,28 @@ func TestUsersDeleteGone(t *testing.T) {
 }
 
 func TestUsersCreateReplyWithoutUser(t *testing.T) {
-	f := &fakeCommander{replies: []fakeReply{{result: `{"other":1}`}}}
-	if _, err := NewUsers(f).Create(t.Context(), map[string]any{"name": "Kid"}); err == nil {
-		t.Error("Create with a reply without user = nil error, want one")
+	for _, reply := range []string{`{"other":1}`, `{"user":null}`} {
+		f := &fakeCommander{replies: []fakeReply{{result: reply}}}
+		if _, err := NewUsers(f).Create(t.Context(), map[string]any{"name": "Kid"}); err == nil {
+			t.Errorf("Create with the reply %s = nil error, want one", reply)
+		}
+	}
+}
+
+func TestUserLogins(t *testing.T) {
+	u := User{Credentials: []Credential{{Type: "homeassistant"}, {Type: "command_line"}, {Type: "homeassistant"}}}
+	if n := u.Logins(); n != 2 {
+		t.Errorf("Logins = %d, want 2", n)
+	}
+}
+
+func TestUsersCurrent(t *testing.T) {
+	f := &fakeCommander{replies: []fakeReply{{result: `{"id":"u1","name":"Owner","is_owner":true,"is_admin":true}`}}}
+	got, err := NewUsers(f).Current(t.Context())
+	if err != nil || got.ID != "u1" || !got.IsOwner {
+		t.Errorf("Current = %+v, %v", got, err)
+	}
+	if !reflect.DeepEqual(f.calls, []fakeCall{{"auth/current_user", nil}}) {
+		t.Errorf("calls = %+v", f.calls)
 	}
 }

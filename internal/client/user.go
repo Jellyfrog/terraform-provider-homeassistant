@@ -21,6 +21,25 @@ type User struct {
 	LocalOnly       bool     `json:"local_only"`
 	SystemGenerated bool     `json:"system_generated"`
 	GroupIDs        []string `json:"group_ids"`
+	// Credentials are the user's logins, one per auth provider credential.
+	Credentials []Credential `json:"credentials"`
+}
+
+// Credential is one login of a user, by the type of its auth provider, e.g. `homeassistant`.
+type Credential struct {
+	Type string `json:"type"`
+}
+
+// Logins returns how many Home Assistant credentials (username and password) the user has.
+// Username reports only the first; Home Assistant before 2026.11 allows more than one.
+func (u User) Logins() int {
+	n := 0
+	for _, c := range u.Credentials {
+		if c.Type == "homeassistant" {
+			n++
+		}
+	}
+	return n
 }
 
 // Users manages users (`config/auth/list|create|update|delete`, naming a user by `user_id`) and
@@ -41,6 +60,19 @@ func NewUsers(ws WSCommander) Users {
 		reply:  "user",
 		idOf:   func(u User) string { return u.ID },
 	}}
+}
+
+// Configured reports whether u is connected to an instance.
+func (u Users) Configured() bool {
+	return u.ws != nil
+}
+
+// Current returns the user whose token the client uses (`auth/current_user`). Only its ID, Name,
+// and IsOwner are set: this command names a credential's type differently, so Logins is 0.
+func (u Users) Current(ctx context.Context) (User, error) {
+	var user User
+	err := u.ws.Command(ctx, "auth/current_user", nil, &user)
+	return user, err
 }
 
 // CreateCredentials gives the user with the given ID a username and password. The user must

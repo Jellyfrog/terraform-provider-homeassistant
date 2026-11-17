@@ -37,8 +37,6 @@ func (f *fakeCommander) Command(_ context.Context, typ string, params map[string
 	return nil
 }
 
-func ptr[T any](v T) *T { return &v }
-
 func TestDashboardsGet(t *testing.T) {
 	f := &fakeCommander{replies: []fakeReply{{result: `[
 		{"id":"map","url_path":"map","mode":"storage","title":"Map","icon":"mdi:map","show_in_sidebar":true,"require_admin":false},
@@ -87,7 +85,7 @@ func TestDashboardsCreateAndUpdate_IconHandling(t *testing.T) {
 		t.Errorf("update dashboard_id = %v", f.calls[1].params["dashboard_id"])
 	}
 
-	meta.Icon = ptr("mdi:home")
+	meta.Icon = new("mdi:home")
 	if err := d.Update(t.Context(), "my_home", meta); err != nil {
 		t.Fatal(err)
 	}

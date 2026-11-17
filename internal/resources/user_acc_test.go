@@ -240,6 +240,16 @@ func TestAccUser_WriteOnlyPassword(t *testing.T) {
 		},
 		Steps: []resource.TestStep{
 			{
+				// Without a version, a later change of password_wo would never be applied.
+				Config: userConfig(`
+  name        = "Acc WO User"
+  username    = "acc-wo-user"
+  password_wo = "acc-wo-password-1"
+`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`password_wo_version`),
+			},
+			{
 				Config: config("acc-wo-password-1", 1),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckNoResourceAttr(addr, "password"),

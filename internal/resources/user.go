@@ -108,14 +108,14 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			},
 			"username": schema.StringAttribute{
 				Description: "Username to log in with. It must be lowercase and have no spaces at the start or " +
-					"end. Without it, the user has no password login. Removing it from the configuration " +
+					"end, unless it is the username of an imported login, which may keep it. Without it, the user " +
+					"has no password login. Removing it from the configuration " +
 					"deletes the login; the plan warns about it. Changing it renames the login in place and " +
 					"needs the owner's token. Creating a login needs `password` or `password_wo`.",
 				Optional: true,
-				Validators: []validator.String{
-					stringvalidator.LengthAtLeast(1),
-					usernameValidator{},
-				},
+				// The plan checks the format: an imported login may keep a username that older Home
+				// Assistant versions stored unchanged, e.g. "Jane".
+				Validators: []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"password": schema.StringAttribute{
 				Description: "Password to log in with. It is kept in the state, so protect the state. Home " +
@@ -137,15 +137,18 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 					"later; with older versions, use `password`. Because the provider cannot see a change of a " +
 					"write-only value, it sets the password when the login is created and whenever " +
 					"`password_wo_version` changes. Changing the password of an existing login needs the " +
-					"owner's token. Needs `username`.",
-				Optional:   true,
-				Sensitive:  true,
-				WriteOnly:  true,
-				Validators: []validator.String{stringvalidator.AlsoRequires(path.MatchRoot("username"))},
+					"owner's token. Needs `username` and `password_wo_version`.",
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				Validators: []validator.String{
+					stringvalidator.AlsoRequires(path.MatchRoot("username"), path.MatchRoot("password_wo_version")),
+				},
 			},
 			"password_wo_version": schema.Int64Attribute{
 				Description: "Any number that changes when `password_wo` changes, e.g. `1`, then `2`. Changing it " +
-					"sets the password from `password_wo`.",
+					"sets the password from `password_wo`, and so does switching from `password` to `password_wo`. " +
+					"Needs `password_wo`.",
 				Optional:   true,
 				Validators: []validator.Int64{int64validator.AlsoRequires(path.MatchRoot("password_wo"))},
 			},
@@ -172,31 +175,12 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 	}
 }
 
-// usernameValidator accepts usernames that Home Assistant stores unchanged: it rejects new
-// usernames that are not lowercase or have spaces at the start or end.
-type usernameValidator struct{}
-
-var _ validator.String = usernameValidator{}
-
-func (usernameValidator) Description(context.Context) string {
-	return "must be lowercase, without spaces at the start or end"
-}
-
-func (v usernameValidator) MarkdownDescription(ctx context.Context) string {
-	return v.Description(ctx)
-}
-
-func (v usernameValidator) ValidateString(ctx context.Context, req validator.StringRequest, resp *validator.StringResponse) {
-	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
-		return
-	}
-	s := req.ConfigValue.ValueString()
-	// Home Assistant requires username == username.strip().casefold(); Unicode case folding is
-	// what Python's casefold does, e.g. "ß" becomes "ss", which lowercasing keeps.
-	if strings.TrimSpace(s) != s || cases.Fold().String(s) != s {
-		resp.Diagnostics.AddAttributeError(req.Path, "Invalid Attribute Value",
-			fmt.Sprintf("Attribute %s %s, got: %q", req.Path, v.Description(ctx), s))
-	}
+// normalUsername reports whether Home Assistant stores the username s unchanged: it is lowercase
+// and has no spaces at the start or end. Home Assistant requires username ==
+// username.strip().casefold(); Unicode case folding is what Python's casefold does, e.g. "ß"
+// becomes "ss", which lowercasing keeps.
+func normalUsername(s string) bool {
+	return strings.TrimSpace(s) == s && cases.Fold().String(s) == s
 }
 
 func (r *userResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -255,8 +239,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 
 	// The rest runs on the new user; if it fails, the user is deleted again, even if ctx was
 	// cancelled, so no half-made user is left behind.
-	undo := func(summary string, err error) {
-		detail := client.ErrorDetail(err)
+	undo := func(summary, detail string) {
 		if delErr := r.users.Delete(context.WithoutCancel(ctx), u.ID); delErr != nil {
 			detail += fmt.Sprintf(". Deleting the new user %s again also failed: %s. Delete it in Home Assistant",
 				u.ID, client.ErrorDetail(delErr))
@@ -267,23 +250,29 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 	if !plan.IsActive.ValueBool() {
 		if _, err := r.users.Update(ctx, u.ID, map[string]any{"is_active": false}); err != nil {
-			undo("Deactivating user", err)
+			undo("Deactivating user", client.ErrorDetail(err))
 			return
 		}
 	}
 	if !plan.Username.IsNull() {
 		if err := r.users.CreateCredentials(ctx, u.ID, plan.Username.ValueString(), password.ValueString()); err != nil {
-			undo("Creating login", err)
+			undo("Creating login", client.ErrorDetail(err))
 			return
 		}
 	}
 
 	plan.ID = types.StringValue(u.ID)
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	if diags := resp.State.Set(ctx, plan); diags.HasError() {
+		// A user that is not in the state would make the next apply fail on its username.
+		resp.Diagnostics.Append(diags...)
+		undo("Saving user", "The new user could not be saved to the state")
+		resp.State.RemoveResource(ctx)
+	}
 }
 
-// ModifyPlan rejects creating a login without a password, which Home Assistant needs, and warns
-// when the plan deletes a login.
+// ModifyPlan rejects creating a login without a password, which Home Assistant needs, and a new
+// username that Home Assistant would not store unchanged. It warns when the plan deletes a login,
+// and when it changes the username or password of a login with a token that is not the owner's.
 func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
@@ -298,6 +287,14 @@ func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// A username in state may keep its format: older Home Assistant versions stored it unchanged.
+	if name := plan.Username; !name.IsNull() && !name.IsUnknown() && !name.Equal(state.Username) &&
+		!normalUsername(name.ValueString()) {
+		resp.Diagnostics.AddAttributeError(path.Root("username"), "Invalid username",
+			fmt.Sprintf("The username must be lowercase, without spaces at the start or end, got: %q. Home "+
+				"Assistant would store it as %q.", name.ValueString(),
+				cases.Fold().String(strings.TrimSpace(name.ValueString()))))
+	}
 	hasLogin := !state.Username.IsNull()
 	switch {
 	case !hasLogin && !plan.Username.IsUnknown():
@@ -307,7 +304,32 @@ func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRe
 			fmt.Sprintf("`username` is not set, so applying deletes the login %q of user %s, and it can no "+
 				"longer log in with a password. Set `username = %q` to keep it.",
 				state.Username.ValueString(), state.ID.ValueString(), state.Username.ValueString()))
+	case hasLogin && (!plan.Username.Equal(state.Username) || passwordChanged(plan, state, config)):
+		r.warnUnlessOwner(ctx, state.ID.ValueString(), &resp.Diagnostics)
 	}
+}
+
+// warnUnlessOwner warns that changing the username or password of user id needs the owner's
+// token, unless the provider's token is the owner's. Without the warning, apply would update the
+// settings and then fail on the login, and so would every apply after it.
+func (r *userResource) warnUnlessOwner(ctx context.Context, id string, diags *diag.Diagnostics) {
+	token := "the provider's token may not be the owner's, so applying may fail at that step " +
+		"(the provider could not check its token yet)"
+	if r.users.Configured() {
+		u, err := r.users.Current(ctx)
+		switch {
+		case err == nil && u.IsOwner:
+			return
+		case err == nil:
+			token = "the provider's token is not the owner's, so applying will fail at that step"
+		default:
+			token = fmt.Sprintf("the provider's token may not be the owner's, so applying may fail at "+
+				"that step (checking the token failed: %s)", err)
+		}
+	}
+	diags.AddAttributeWarning(path.Root("username"), "Changing the login needs the owner's token",
+		fmt.Sprintf("Applying changes the username or password of user %s. Home Assistant lets only its "+
+			"owner do that, and %s. Configure the provider with a token of the owner.", id, token))
 }
 
 // managed adds an error and returns false for users the provider cannot manage.
@@ -321,6 +343,13 @@ func managed(u client.User, diags *diag.Diagnostics) bool {
 		diags.AddError("User is the owner",
 			fmt.Sprintf("User %s (%q) is the owner of Home Assistant. The provider cannot manage the "+
 				"owner.", u.ID, u.Name))
+		return false
+	case u.Logins() > 1:
+		// Home Assistant reports only the first username, so the others could not be managed, and
+		// deleting the login would leave them.
+		diags.AddError("User has more than one login",
+			fmt.Sprintf("User %s (%q) has %d usernames to log in with. The provider manages only users "+
+				"with at most one. Delete the others in Home Assistant.", u.ID, u.Name, u.Logins()))
 		return false
 	}
 	return true
@@ -432,8 +461,8 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-// loginIs reports whether the user with the given ID has the login want (nil for none) in Home
-// Assistant, and adds an error otherwise. A plan made before the login changed outside OpenTofu
+// loginIs reports whether the user with the given ID is still one the provider manages and has the
+// login want (nil for none) in Home Assistant, and adds an error otherwise. A plan made before the login changed outside OpenTofu
 // must not attach a second login (Home Assistant before 2026.11 allows it), nor delete a login by a
 // username that now belongs to another user.
 func (r *userResource) loginIs(ctx context.Context, id string, want *string, diags *diag.Diagnostics) bool {
@@ -444,6 +473,8 @@ func (r *userResource) loginIs(ctx context.Context, id string, want *string, dia
 		return false
 	case !ok:
 		diags.AddError("User is gone", fmt.Sprintf("User %s was deleted outside OpenTofu. Plan again.", id))
+		return false
+	case !managed(u, diags):
 		return false
 	case (u.Username == nil) != (want == nil) || (want != nil && *u.Username != *want):
 		diags.AddAttributeError(path.Root("username"), "Login changed outside OpenTofu",

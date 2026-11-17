@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -29,6 +29,8 @@ type fakeUsers struct {
 	// command. Like the real client, a command on a cancelled context fails.
 	cancelOn string
 	cancel   context.CancelFunc
+	// notOwner makes auth/current_user report a user that is not the owner.
+	notOwner bool
 }
 
 func (f *fakeUsers) Command(ctx context.Context, typ string, params map[string]any, result any) error {
@@ -52,6 +54,8 @@ func (f *fakeUsers) Command(ctx context.Context, typ string, params map[string]a
 		return nil
 	}
 	switch strings.TrimPrefix(typ, "config/") {
+	case "auth/current_user":
+		return reply(client.User{ID: "u0", IsOwner: !f.notOwner})
 	case "auth/list":
 		return reply(f.users)
 	case "auth/create":
@@ -246,6 +250,10 @@ func TestUserReadRejectsUnmanageable(t *testing.T) {
 		{client.User{ID: "u1", SystemGenerated: true, GroupIDs: []string{client.GroupAdmin}}, "generated"},
 		{client.User{ID: "u1", GroupIDs: []string{client.GroupAdmin, client.GroupUser}}, "exactly one"},
 		{client.User{ID: "u1"}, "exactly one"},
+		{client.User{
+			ID: "u1", Username: new("jane"), GroupIDs: []string{client.GroupUser},
+			Credentials: []client.Credential{{Type: "homeassistant"}, {Type: "homeassistant"}},
+		}, "2 usernames"},
 	} {
 		m := jane()
 		m.ID = types.StringValue("u1")
@@ -324,8 +332,8 @@ func TestUserUpdatePasswordNeedsOwner(t *testing.T) {
 
 func TestUserImport(t *testing.T) {
 	f := newFakeUsers(
-		client.User{ID: "u1", IsOwner: true, Username: ptr("owner")},
-		client.User{ID: "u2", Username: ptr("jane")},
+		client.User{ID: "u1", IsOwner: true, Username: new("owner")},
+		client.User{ID: "u2", Username: new("jane")},
 		client.User{ID: "u3", SystemGenerated: true},
 	)
 	for _, tc := range []struct{ id, wantID, wantErr string }{
@@ -348,21 +356,22 @@ func TestUserImport(t *testing.T) {
 	}
 }
 
-func TestUsernameValidator(t *testing.T) {
+func TestNormalUsername(t *testing.T) {
 	for s, ok := range map[string]bool{"jane": true, "jane.doe@x": true, "Jane": false, " jane": false, "jane ": false, "straße": false} {
-		var resp validator.StringResponse
-		usernameValidator{}.ValidateString(t.Context(), validator.StringRequest{ConfigValue: types.StringValue(s)}, &resp)
-		if resp.Diagnostics.HasError() == ok {
-			t.Errorf("%q: errors %v, want ok = %v", s, resp.Diagnostics, ok)
+		if normalUsername(s) != ok {
+			t.Errorf("normalUsername(%q) = %v, want %v", s, !ok, ok)
 		}
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
-
 func modifyUserPlan(t *testing.T, state *userModel, plan userModel) resource.ModifyPlanResponse {
 	t.Helper()
-	r := userRes(newFakeUsers())
+	return modifyUserPlanWith(t, newFakeUsers(), state, plan)
+}
+
+func modifyUserPlanWith(t *testing.T, f *fakeUsers, state *userModel, plan userModel) resource.ModifyPlanResponse {
+	t.Helper()
+	r := userRes(f)
 	p, config := userRequest(t, r, plan)
 	req := resource.ModifyPlanRequest{Plan: p, Config: config, State: stateOf(t, r, userModel{})}
 	req.State.Raw = tftypes.NewValue(req.State.Schema.Type().TerraformType(t.Context()), nil)
@@ -392,6 +401,107 @@ func TestUserModifyPlan(t *testing.T) {
 	checkDiags(t, resp.Diagnostics, "")
 	if w := resp.Diagnostics.Warnings(); len(w) != 1 || !strings.Contains(w[0].Detail(), `login "jane"`) {
 		t.Errorf("warnings = %v, want one about deleting the login", w)
+	}
+}
+
+func TestUserModifyPlanUsernameFormat(t *testing.T) {
+	m := jane()
+	m.Username = types.StringValue("Jane")
+	// A new username that Home Assistant would change is rejected.
+	checkDiags(t, modifyUserPlan(t, nil, m).Diagnostics, `would store it as "jane"`)
+	// An imported one that older Home Assistant versions stored unchanged may stay.
+	imported := m
+	imported.ID = types.StringValue("u1")
+	checkDiags(t, modifyUserPlan(t, &imported, m).Diagnostics, "")
+	// Renaming to it is rejected too.
+	withLogin := jane()
+	withLogin.ID = types.StringValue("u1")
+	checkDiags(t, modifyUserPlan(t, &withLogin, m).Diagnostics, "must be lowercase")
+}
+
+func TestUserModifyPlanWarnsWithoutOwnerToken(t *testing.T) {
+	withLogin := jane()
+	withLogin.ID = types.StringValue("u1")
+	renamed := withLogin
+	renamed.Username = types.StringValue("janet")
+	repassed := withLogin
+	repassed.Password = types.StringValue("secret2")
+	renamedName := withLogin
+	renamedName.Name = types.StringValue("Janet")
+	for _, tc := range []struct {
+		name     string
+		plan     userModel
+		notOwner bool
+		want     bool
+	}{
+		{"rename", renamed, true, true},
+		{"password", repassed, true, true},
+		{"write-only password", withWO(withLogin, "wo", 1), true, true},
+		{"rename as owner", renamed, false, false},
+		{"settings only", renamedName, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakeUsers()
+			f.notOwner = tc.notOwner
+			resp := modifyUserPlanWith(t, f, &withLogin, tc.plan)
+			checkDiags(t, resp.Diagnostics, "")
+			w := resp.Diagnostics.Warnings()
+			if got := len(w) == 1 && strings.Contains(w[0].Detail(), "token of the owner"); got != tc.want || len(w) > 1 {
+				t.Errorf("warnings = %v, want one about the owner's token: %v", w, tc.want)
+			}
+		})
+	}
+}
+
+// An unconfigured provider, e.g. while its settings are unknown, cannot check the token: the plan
+// warns instead of failing.
+func TestUserModifyPlanWarnsWhenUnconfigured(t *testing.T) {
+	withLogin := jane()
+	withLogin.ID = types.StringValue("u1")
+	renamed := withLogin
+	renamed.Username = types.StringValue("janet")
+	r := &userResource{}
+	p, config := userRequest(t, r, renamed)
+	req := resource.ModifyPlanRequest{Plan: p, Config: config, State: stateOf(t, r, withLogin)}
+	resp := resource.ModifyPlanResponse{Plan: req.Plan}
+	r.ModifyPlan(t.Context(), req, &resp)
+	checkDiags(t, resp.Diagnostics, "")
+	if len(resp.Diagnostics.Warnings()) != 1 {
+		t.Errorf("warnings = %v, want one", resp.Diagnostics.Warnings())
+	}
+}
+
+// If the new user cannot be saved to the state, it is deleted again, or the next apply would fail
+// on its username.
+func TestUserCreateUndoneWhenStateFails(t *testing.T) {
+	f := newFakeUsers()
+	r := userRes(f)
+	plan, config := userRequest(t, r, jane())
+	// A state of another schema cannot take the user.
+	resp := resource.CreateResponse{State: tfsdk.State{Schema: schema.Schema{
+		Attributes: map[string]schema.Attribute{"id": schema.StringAttribute{Computed: true}},
+	}}}
+	r.Create(t.Context(), resource.CreateRequest{Plan: plan, Config: config}, &resp)
+	errs := resp.Diagnostics.Errors()
+	if len(errs) != 2 || !strings.Contains(errs[1].Detail(), "deleted again") {
+		t.Errorf("errors = %v, want the state error and one saying the user was deleted again", errs)
+	}
+	if len(f.users) != 0 {
+		t.Errorf("users left behind: %+v", f.users)
+	}
+}
+
+func TestUserUpdateRejectsSecondLogin(t *testing.T) {
+	// Planned to delete the login "jane"; the user got a second one since, which would stay.
+	f := newFakeUsers()
+	created, _ := createUser(t, f, jane())
+	f.users[0].Credentials = []client.Credential{{Type: "homeassistant"}, {Type: "homeassistant"}}
+	m := jane()
+	m.ID, m.Username, m.Password = created.ID, types.StringNull(), types.StringNull()
+	_, resp := updateUser(t, f, created, m)
+	checkDiags(t, resp.Diagnostics, "has 2 usernames")
+	if slices.Contains(f.calls, "config/auth_provider/homeassistant/delete") {
+		t.Error("a login was deleted")
 	}
 }
 
@@ -524,7 +634,7 @@ func TestUserUpdateRejectsLoginChangedOutside(t *testing.T) {
 		// Planned without a login; one was added in Home Assistant since.
 		f := newFakeUsers()
 		created, _ := createUser(t, f, noLogin)
-		f.users[0].Username = ptr("jane-elsewhere")
+		f.users[0].Username = new("jane-elsewhere")
 		m := jane()
 		m.ID = created.ID
 		_, resp := updateUser(t, f, created, m)
@@ -537,7 +647,7 @@ func TestUserUpdateRejectsLoginChangedOutside(t *testing.T) {
 		// Planned to delete the login "jane", which was renamed and given to someone else since.
 		f := newFakeUsers()
 		created, _ := createUser(t, f, jane())
-		f.users[0].Username = ptr("janet")
+		f.users[0].Username = new("janet")
 		m := noLogin
 		m.ID = created.ID
 		_, resp := updateUser(t, f, created, m)

@@ -25,7 +25,7 @@ func TestPersonsGet(t *testing.T) {
 			t.Errorf("Get(%q) = %v, %v, %v; want ok %v, yaml %v", tc.id, ok, yaml, err, tc.ok, tc.yaml)
 		}
 		if tc.ok {
-			want := Person{ID: "jane", Name: "Jane", UserID: ptr("u2"), DeviceTrackers: []string{"device_tracker.phone"}}
+			want := Person{ID: "jane", Name: "Jane", UserID: new("u2"), DeviceTrackers: []string{"device_tracker.phone"}}
 			if !reflect.DeepEqual(p, want) {
 				t.Errorf("Get(%q) = %+v, want %+v", tc.id, p, want)
 			}

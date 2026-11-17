@@ -36,8 +36,9 @@ func (r Registry[T]) command(ctx context.Context, typ string, params map[string]
 	if err := r.ws.Command(ctx, typ, params, &wrapped); err != nil {
 		return item, err
 	}
+	// A null value decodes without error into a zero T, so it counts as missing.
 	raw, ok := wrapped[r.reply]
-	if !ok {
+	if !ok || string(raw) == "null" {
 		return item, fmt.Errorf("%s: the reply has no %q", typ, r.reply)
 	}
 	err := json.Unmarshal(raw, &item)
