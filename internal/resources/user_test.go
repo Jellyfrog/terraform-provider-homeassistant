@@ -271,16 +271,18 @@ func TestUserUpdateLogin(t *testing.T) {
 		m.Password = types.StringValue("secret2")
 		return m
 	}
+	// Adding or removing a login checks the login in Home Assistant first.
+	const check = "config/auth/list"
 	for _, tc := range []struct {
 		name          string
 		from, to      func(userModel) userModel
-		wantCall      string
+		wantCalls     []string // after config/auth/update
 		wantPasswords map[string]string
 	}{
-		{"add", noLogin, same, "config/auth_provider/homeassistant/create", map[string]string{"jane": "secret"}},
-		{"remove", same, noLogin, "config/auth_provider/homeassistant/delete", map[string]string{}},
-		{"rename", same, renamed, "config/auth_provider/homeassistant/admin_change_username", map[string]string{"janet": "secret"}},
-		{"password", same, repassed, "config/auth_provider/homeassistant/admin_change_password", map[string]string{"jane": "secret2"}},
+		{"add", noLogin, same, []string{check, "config/auth_provider/homeassistant/create"}, map[string]string{"jane": "secret"}},
+		{"remove", same, noLogin, []string{check, "config/auth_provider/homeassistant/delete"}, map[string]string{}},
+		{"rename", same, renamed, []string{"config/auth_provider/homeassistant/admin_change_username"}, map[string]string{"janet": "secret"}},
+		{"password", same, repassed, []string{"config/auth_provider/homeassistant/admin_change_password"}, map[string]string{"jane": "secret2"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeUsers()
@@ -290,12 +292,7 @@ func TestUserUpdateLogin(t *testing.T) {
 			want.ID = created.ID
 			got, resp := updateUser(t, f, created, want)
 			checkDiags(t, resp.Diagnostics, "")
-			wantCalls := []string{"config/auth/update", tc.wantCall}
-			if tc.name == "add" || tc.name == "remove" {
-				// Adding or removing a login checks the login in Home Assistant first.
-				wantCalls = []string{"config/auth/update", "config/auth/list", tc.wantCall}
-			}
-			if !slices.Equal(f.calls, wantCalls) {
+			if !slices.Equal(f.calls, append([]string{"config/auth/update"}, tc.wantCalls...)) {
 				t.Errorf("calls = %v", f.calls)
 			}
 			if fmt.Sprint(f.passwords) != fmt.Sprint(tc.wantPasswords) {
@@ -540,10 +537,14 @@ func TestUserUpdateRejectsLoginChangedOutside(t *testing.T) {
 		f.users[0].Username = ptr("janet")
 		m := noLogin
 		m.ID = created.ID
-		_, resp := updateUser(t, f, created, m)
+		got, resp := updateUser(t, f, created, m)
 		checkDiags(t, resp.Diagnostics, `is "janet" in Home Assistant, but the plan expected "jane"`)
 		if slices.Contains(f.calls, "config/auth_provider/homeassistant/delete") {
 			t.Error("a login was deleted")
+		}
+		// The state keeps the login, so the next plan, after a refresh, sees the new one.
+		if got.Username.ValueString() != "jane" {
+			t.Errorf("state username = %v, want \"jane\"", got.Username)
 		}
 	})
 }

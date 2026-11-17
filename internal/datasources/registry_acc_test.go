@@ -3,7 +3,6 @@ package datasources_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"regexp"
 	"slices"
 	"testing"
@@ -25,12 +24,7 @@ type registryFixture struct {
 // is renamed to "Acc Moon".
 func setUpRegistry(t *testing.T) registryFixture {
 	t.Helper()
-	ha := acctest.SharedInstance(t)
-	u, err := url.Parse(ha.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := client.New(client.Config{URL: u, Token: ha.Token, Timeout: 30 * time.Second})
+	c := acctest.Client(t)
 	ctx := context.Background()
 	must := func(err error) {
 		t.Helper()

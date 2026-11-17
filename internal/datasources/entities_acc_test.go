@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"slices"
 	"testing"
 	"time"
@@ -76,15 +75,11 @@ func setUpEntities(t *testing.T) entitiesFixture {
 	return entitiesFixture{areaID: area.AreaID, areaName: area.Name, labelID: label.LabelID, labelName: label.Name}
 }
 
-// entitiesClient returns a client for the shared HA instance.
+// entitiesClient returns a client for the shared HA instance. Its WebSocket connection is closed
+// when the test ends.
 func entitiesClient(t *testing.T) *client.HAClient {
 	t.Helper()
-	ha := acctest.SharedInstance(t)
-	u, err := url.Parse(ha.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return client.New(client.Config{URL: u, Token: ha.Token, Timeout: 30 * time.Second})
+	return acctest.Client(t)
 }
 
 // updateEntity updates an entity registry entry. A new helper's entity may reach the entity
@@ -294,13 +289,8 @@ func checkEntityIDs(name string, ids ...string) resource.TestCheckFunc {
 // IDs of their sensors.
 func setUpTwinDevices(t *testing.T) (deviceIDs, entityIDs [2]string) {
 	t.Helper()
-	ha := acctest.SharedInstance(t)
+	c := acctest.Client(t)
 	acctest.StartMosquitto(t)
-	u, err := url.Parse(ha.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := client.New(client.Config{URL: u, Token: ha.Token, Timeout: 30 * time.Second})
 	ctx := context.Background()
 	must := func(err error) {
 		t.Helper()

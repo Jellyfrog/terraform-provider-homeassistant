@@ -13,6 +13,8 @@ package acctest
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -23,6 +25,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/toelke/terraform-provider-homeassistant/internal/client"
 	"github.com/toelke/terraform-provider-homeassistant/internal/provider"
 )
 
@@ -115,6 +118,22 @@ func SharedInstance(t *testing.T) *Instance {
 		t.Fatalf("start Home Assistant: %v", startErr)
 	}
 	return shared
+}
+
+// Client returns a client for the shared instance, for setting up and checking what the provider
+// does. Its WebSocket connection is closed when the test ends.
+func Client(t *testing.T) *client.HAClient {
+	t.Helper()
+	ha := SharedInstance(t)
+	u, err := url.Parse(ha.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := client.New(client.Config{URL: u, Token: ha.Token, Timeout: 30 * time.Second})
+	if ws, ok := c.WS.(io.Closer); ok {
+		t.Cleanup(func() { _ = ws.Close() })
+	}
+	return c
 }
 
 func start(ctx context.Context) (*Instance, error) {

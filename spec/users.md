@@ -61,7 +61,7 @@ Commands: `config/auth/list|create|update|delete` (key `user_id`), and for the l
   so those two steps fail with an admin token that is not the owner's. The error says so. Adding
   or removing a login, and every other attribute, needs only an admin token.
 - Before 2026.11, `…/homeassistant/create` attaches a second login to a user that has one. The
-  provider calls it only when the user has no login in state.
+  provider calls it only when the user has no login, in state and in HA (see Update).
 
 ## `homeassistant_person` (generated ID, ADR-0009)
 
