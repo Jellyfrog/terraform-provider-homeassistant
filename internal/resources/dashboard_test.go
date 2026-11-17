@@ -146,8 +146,7 @@ func (f *fakeLovelace) Command(ctx context.Context, typ string, _ map[string]any
 // planOf returns a plan of resource r holding the model m.
 func planOf(t *testing.T, r resource.Resource, m any) tfsdk.Plan {
 	t.Helper()
-	s := stateOf(t, r, m)
-	return tfsdk.Plan(s)
+	return tfsdk.Plan(stateOf(t, r, m))
 }
 
 // jsonReply decodes v into result through JSON, as a fake WSCommander replies. A nil result

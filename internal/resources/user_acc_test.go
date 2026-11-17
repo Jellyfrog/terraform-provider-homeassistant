@@ -27,15 +27,11 @@ func users(t *testing.T) client.Users {
 // userByName returns the user with the given display name, if there is one.
 func userByName(t *testing.T, name string) (client.User, bool) {
 	t.Helper()
-	all, err := users(t).List(context.Background())
+	u, ok, err := users(t).Find(context.Background(), func(u client.User) bool { return u.Name == name })
 	if err != nil {
 		t.Fatal(err)
 	}
-	i := slices.IndexFunc(all, func(u client.User) bool { return u.Name == name })
-	if i < 0 {
-		return client.User{}, false
-	}
-	return all[i], true
+	return u, ok
 }
 
 // canLogIn reports whether Home Assistant accepts the username and password in its login flow.

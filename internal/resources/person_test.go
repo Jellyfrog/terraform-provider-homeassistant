@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"reflect"
 	"slices"
 	"testing"
@@ -25,10 +24,7 @@ type fakePersons struct {
 func (f *fakePersons) Command(_ context.Context, typ string, params map[string]any, result any) error {
 	reply := func(v any) error { return jsonReply(v, result) }
 	// apply sets the fields in params on p, through JSON like Home Assistant gets them.
-	apply := func(p *client.Person, params map[string]any) {
-		b, _ := json.Marshal(params)
-		_ = json.Unmarshal(b, p)
-	}
+	apply := func(p *client.Person, params map[string]any) { _ = jsonReply(params, p) }
 	switch typ {
 	case "person/list":
 		return reply(map[string]any{"storage": f.storage, "config": f.yaml})

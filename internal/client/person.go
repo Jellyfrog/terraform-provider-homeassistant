@@ -1,6 +1,9 @@
 package client
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 // Person is a person: someone whose presence Home Assistant tracks, optionally linked to a user.
 type Person struct {
@@ -42,17 +45,11 @@ func (p Persons) Get(ctx context.Context, id string) (person Person, ok, yaml bo
 	if err != nil {
 		return person, false, false, err
 	}
-	for _, it := range storage {
-		if it.ID == id {
-			return it, true, false, nil
-		}
+	hasID := func(it Person) bool { return it.ID == id }
+	if i := slices.IndexFunc(storage, hasID); i >= 0 {
+		return storage[i], true, false, nil
 	}
-	for _, it := range yamlPersons {
-		if it.ID == id {
-			return person, false, true, nil
-		}
-	}
-	return person, false, false, nil
+	return person, false, slices.ContainsFunc(yamlPersons, hasID), nil
 }
 
 // Create creates a person from fields (`name`, `user_id`, `device_trackers`, `picture`) and

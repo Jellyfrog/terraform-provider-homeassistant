@@ -175,12 +175,11 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 	}
 }
 
-// normalUsername reports whether Home Assistant stores the username s unchanged: it is lowercase
-// and has no spaces at the start or end. Home Assistant requires username ==
-// username.strip().casefold(); Unicode case folding is what Python's casefold does, e.g. "ß"
-// becomes "ss", which lowercasing keeps.
-func normalUsername(s string) bool {
-	return strings.TrimSpace(s) == s && cases.Fold().String(s) == s
+// normalUsername returns the username s as Home Assistant requires it: lowercase, without spaces at
+// the start or end. Home Assistant rejects a username unless username == username.strip().casefold();
+// Unicode case folding is what Python's casefold does, e.g. "ß" becomes "ss", which lowercasing keeps.
+func normalUsername(s string) string {
+	return cases.Fold().String(strings.TrimSpace(s))
 }
 
 func (r *userResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -289,11 +288,10 @@ func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRe
 	}
 	// A username in state may keep its format: older Home Assistant versions stored it unchanged.
 	if name := plan.Username; !name.IsNull() && !name.IsUnknown() && !name.Equal(state.Username) &&
-		!normalUsername(name.ValueString()) {
+		normalUsername(name.ValueString()) != name.ValueString() {
 		resp.Diagnostics.AddAttributeError(path.Root("username"), "Invalid username",
 			fmt.Sprintf("The username must be lowercase, without spaces at the start or end, got: %q. Home "+
-				"Assistant would store it as %q.", name.ValueString(),
-				cases.Fold().String(strings.TrimSpace(name.ValueString()))))
+				"Assistant would store it as %q.", name.ValueString(), normalUsername(name.ValueString())))
 	}
 	hasLogin := !state.Username.IsNull()
 	switch {
@@ -415,7 +413,9 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 
 	fields := plan.fields()
 	fields["is_active"] = plan.IsActive.ValueBool()
-	if _, err := r.users.Update(ctx, id, fields); err != nil {
+	// The reply is the user as Home Assistant has it now, so the login checks below need no list.
+	u, err := r.users.Update(ctx, id, fields)
+	if err != nil {
 		resp.Diagnostics.AddError("Updating user", client.ErrorDetail(err))
 		return
 	}
@@ -427,7 +427,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	oldName, newName := state.Username, plan.Username
 	switch {
 	case oldName.IsNull() && !newName.IsNull():
-		if missingPassword(newName, password, &resp.Diagnostics) || !r.loginIs(ctx, id, nil, &resp.Diagnostics) {
+		if missingPassword(newName, password, &resp.Diagnostics) || !loginIs(u, nil, &resp.Diagnostics) {
 			return
 		}
 		if err := r.users.CreateCredentials(ctx, id, newName.ValueString(), password.ValueString()); err != nil {
@@ -435,7 +435,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 			return
 		}
 	case !oldName.IsNull() && newName.IsNull():
-		if !r.loginIs(ctx, id, oldName.ValueStringPointer(), &resp.Diagnostics) {
+		if !loginIs(u, oldName.ValueStringPointer(), &resp.Diagnostics) {
 			return
 		}
 		if err := r.users.DeleteCredentials(ctx, oldName.ValueString()); err != nil {
@@ -461,25 +461,18 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-// loginIs reports whether the user with the given ID is still one the provider manages and has the
-// login want (nil for none) in Home Assistant, and adds an error otherwise. A plan made before the login changed outside OpenTofu
-// must not attach a second login (Home Assistant before 2026.11 allows it), nor delete a login by a
-// username that now belongs to another user.
-func (r *userResource) loginIs(ctx context.Context, id string, want *string, diags *diag.Diagnostics) bool {
-	u, ok, err := r.users.Get(ctx, id)
-	switch {
-	case err != nil:
-		diags.AddError("Reading user", client.ErrorDetail(err))
+// loginIs reports whether the user u, as Home Assistant has it, is still one the provider manages
+// and has the login want (nil for none), and adds an error otherwise. A plan made before the login
+// changed outside OpenTofu must not attach a second login (Home Assistant before 2026.11 allows it),
+// nor delete a login by a username that now belongs to another user.
+func loginIs(u client.User, want *string, diags *diag.Diagnostics) bool {
+	if !managed(u, diags) {
 		return false
-	case !ok:
-		diags.AddError("User is gone", fmt.Sprintf("User %s was deleted outside OpenTofu. Plan again.", id))
-		return false
-	case !managed(u, diags):
-		return false
-	case (u.Username == nil) != (want == nil) || (want != nil && *u.Username != *want):
+	}
+	if got := loginName(u.Username); got != loginName(want) {
 		diags.AddAttributeError(path.Root("username"), "Login changed outside OpenTofu",
 			fmt.Sprintf("The login of user %s is %s in Home Assistant, but the plan expected %s. Plan again.",
-				id, loginName(u.Username), loginName(want)))
+				u.ID, got, loginName(want)))
 		return false
 	}
 	return true

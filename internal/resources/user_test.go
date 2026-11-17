@@ -298,12 +298,8 @@ func TestUserUpdateLogin(t *testing.T) {
 			want.ID = created.ID
 			got, resp := updateUser(t, f, created, want)
 			checkDiags(t, resp.Diagnostics, "")
-			wantCalls := []string{"config/auth/update", tc.wantCall}
-			if tc.name == "add" || tc.name == "remove" {
-				// Adding or removing a login checks the login in Home Assistant first.
-				wantCalls = []string{"config/auth/update", "config/auth/list", tc.wantCall}
-			}
-			if !slices.Equal(f.calls, wantCalls) {
+			// Adding or removing a login checks the user that the update replies with, without a list.
+			if !slices.Equal(f.calls, []string{"config/auth/update", tc.wantCall}) {
 				t.Errorf("calls = %v", f.calls)
 			}
 			if fmt.Sprint(f.passwords) != fmt.Sprint(tc.wantPasswords) {
@@ -358,23 +354,24 @@ func TestUserImport(t *testing.T) {
 
 func TestNormalUsername(t *testing.T) {
 	for s, ok := range map[string]bool{"jane": true, "jane.doe@x": true, "Jane": false, " jane": false, "jane ": false, "straße": false} {
-		if normalUsername(s) != ok {
-			t.Errorf("normalUsername(%q) = %v, want %v", s, !ok, ok)
+		if got := normalUsername(s); (got == s) != ok {
+			t.Errorf("normalUsername(%q) = %q; want it unchanged: %v", s, got, ok)
 		}
 	}
 }
 
 func modifyUserPlan(t *testing.T, state *userModel, plan userModel) resource.ModifyPlanResponse {
 	t.Helper()
-	return modifyUserPlanWith(t, newFakeUsers(), state, plan)
+	return modifyUserPlanWith(t, userRes(newFakeUsers()), state, plan)
 }
 
-func modifyUserPlanWith(t *testing.T, f *fakeUsers, state *userModel, plan userModel) resource.ModifyPlanResponse {
+func modifyUserPlanWith(t *testing.T, r *userResource, state *userModel, plan userModel) resource.ModifyPlanResponse {
 	t.Helper()
-	r := userRes(f)
 	p, config := userRequest(t, r, plan)
-	req := resource.ModifyPlanRequest{Plan: p, Config: config, State: stateOf(t, r, userModel{})}
-	req.State.Raw = tftypes.NewValue(req.State.Schema.Type().TerraformType(t.Context()), nil)
+	req := resource.ModifyPlanRequest{
+		Plan: p, Config: config,
+		State: tfsdk.State{Schema: p.Schema, Raw: tftypes.NewValue(p.Schema.Type().TerraformType(t.Context()), nil)},
+	}
 	if state != nil {
 		req.State = stateOf(t, r, *state)
 	}
@@ -443,7 +440,7 @@ func TestUserModifyPlanWarnsWithoutOwnerToken(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeUsers()
 			f.notOwner = tc.notOwner
-			resp := modifyUserPlanWith(t, f, &withLogin, tc.plan)
+			resp := modifyUserPlanWith(t, userRes(f), &withLogin, tc.plan)
 			checkDiags(t, resp.Diagnostics, "")
 			w := resp.Diagnostics.Warnings()
 			if got := len(w) == 1 && strings.Contains(w[0].Detail(), "token of the owner"); got != tc.want || len(w) > 1 {
@@ -460,11 +457,7 @@ func TestUserModifyPlanWarnsWhenUnconfigured(t *testing.T) {
 	withLogin.ID = types.StringValue("u1")
 	renamed := withLogin
 	renamed.Username = types.StringValue("janet")
-	r := &userResource{}
-	p, config := userRequest(t, r, renamed)
-	req := resource.ModifyPlanRequest{Plan: p, Config: config, State: stateOf(t, r, withLogin)}
-	resp := resource.ModifyPlanResponse{Plan: req.Plan}
-	r.ModifyPlan(t.Context(), req, &resp)
+	resp := modifyUserPlanWith(t, &userResource{}, &withLogin, renamed)
 	checkDiags(t, resp.Diagnostics, "")
 	if len(resp.Diagnostics.Warnings()) != 1 {
 		t.Errorf("warnings = %v, want one", resp.Diagnostics.Warnings())
