@@ -2,7 +2,6 @@ package resources_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -25,17 +24,13 @@ func users(t *testing.T) client.Users {
 }
 
 // userByName returns the user with the given display name, if there is one.
-func userByName(t *testing.T, name string) (client.User, bool) {
+func userByName(t *testing.T, us client.Users, name string) (client.User, bool) {
 	t.Helper()
-	all, err := users(t).List(context.Background())
+	u, ok, err := us.Find(t.Context(), func(u client.User) bool { return u.Name == name })
 	if err != nil {
 		t.Fatal(err)
 	}
-	i := slices.IndexFunc(all, func(u client.User) bool { return u.Name == name })
-	if i < 0 {
-		return client.User{}, false
-	}
-	return all[i], true
+	return u, ok
 }
 
 // canLogIn reports whether Home Assistant accepts the username and password in its login flow.
@@ -45,7 +40,12 @@ func canLogIn(t *testing.T, username, password string) bool {
 	clientID := base + "/" // as onboarding uses
 	post := func(path string, body any) map[string]any {
 		b, _ := json.Marshal(body)
-		resp, err := http.Post(base+path, "application/json", bytes.NewReader(b))
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+path, bytes.NewReader(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -84,12 +84,13 @@ resource "homeassistant_user" "test" {
 
 func TestAccUser(t *testing.T) {
 	const addr = "homeassistant_user.test"
+	us := users(t)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
 		CheckDestroy: func(*terraform.State) error {
 			for _, name := range []string{"Acc User", "Acc User Renamed"} {
-				if _, ok := userByName(t, name); ok {
+				if _, ok := userByName(t, us, name); ok {
 					t.Errorf("user %q still exists", name)
 				}
 			}
@@ -110,7 +111,7 @@ func TestAccUser(t *testing.T) {
 					resource.TestCheckResourceAttr(addr, "is_active", "true"),
 					resource.TestCheckResourceAttr(addr, "local_only", "false"),
 					func(*terraform.State) error {
-						u, ok := userByName(t, "Acc User")
+						u, ok := userByName(t, us, "Acc User")
 						if !ok || u.Username == nil || *u.Username != "acc-user" || !slices.Equal(u.GroupIDs, []string{client.GroupUser}) {
 							return fmt.Errorf("in Home Assistant: %+v, %v", u, ok)
 						}
@@ -167,7 +168,7 @@ func TestAccUser(t *testing.T) {
 					resource.TestCheckResourceAttr(addr, "is_active", "false"),
 					resource.TestCheckResourceAttr(addr, "local_only", "true"),
 					func(*terraform.State) error {
-						u, ok := userByName(t, "Acc User Renamed")
+						u, ok := userByName(t, us, "Acc User Renamed")
 						if !ok || u.Username != nil || u.IsActive || !u.LocalOnly ||
 							!slices.Equal(u.GroupIDs, []string{client.GroupReadOnly}) {
 							return fmt.Errorf("in Home Assistant: %+v, %v", u, ok)
@@ -179,11 +180,11 @@ func TestAccUser(t *testing.T) {
 			{
 				// Deleted outside OpenTofu: the user drops out of state and is created again.
 				PreConfig: func() {
-					u, ok := userByName(t, "Acc User Renamed")
+					u, ok := userByName(t, us, "Acc User Renamed")
 					if !ok {
 						t.Fatal("user missing")
 					}
-					if err := users(t).Delete(context.Background(), u.ID); err != nil {
+					if err := us.Delete(t.Context(), u.ID); err != nil {
 						t.Fatal(err)
 					}
 				},
@@ -227,13 +228,14 @@ func TestAccUser_WriteOnlyPassword(t *testing.T) {
   password_wo_version = %d
 `, password, version))
 	}
+	us := users(t)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
 		// Write-only attributes need OpenTofu or Terraform 1.11.
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{tfversion.SkipBelow(tfversion.Version1_11_0)},
 		CheckDestroy: func(*terraform.State) error {
-			if _, ok := userByName(t, "Acc WO User"); ok {
+			if _, ok := userByName(t, us, "Acc WO User"); ok {
 				t.Error(`user "Acc WO User" still exists`)
 			}
 			return nil

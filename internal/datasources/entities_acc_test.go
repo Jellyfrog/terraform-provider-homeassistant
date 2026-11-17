@@ -27,7 +27,7 @@ type entitiesFixture struct {
 // only in the state machine, sensor.acc_ents_temp, with a device class.
 func setUpEntities(t *testing.T) entitiesFixture {
 	t.Helper()
-	c := entitiesClient(t)
+	c := acctest.Client(t)
 	ctx := context.Background()
 	must := func(err error) {
 		t.Helper()
@@ -75,13 +75,6 @@ func setUpEntities(t *testing.T) entitiesFixture {
 	return entitiesFixture{areaID: area.AreaID, areaName: area.Name, labelID: label.LabelID, labelName: label.Name}
 }
 
-// entitiesClient returns a client for the shared HA instance. Its WebSocket connection is closed
-// when the test ends.
-func entitiesClient(t *testing.T) *client.HAClient {
-	t.Helper()
-	return acctest.Client(t)
-}
-
 // updateEntity updates an entity registry entry. A new helper's entity may reach the entity
 // registry only shortly after the create returns, so it retries for a while.
 func updateEntity(t *testing.T, c *client.HAClient, fields map[string]any) {
@@ -97,7 +90,7 @@ func updateEntity(t *testing.T, c *client.HAClient, fields map[string]any) {
 // input_boolean.acc_hidden_new is not. It returns the area ID.
 func setUpHiddenEntities(t *testing.T) string {
 	t.Helper()
-	c := entitiesClient(t)
+	c := acctest.Client(t)
 	ctx := context.Background()
 
 	var area struct {
@@ -130,7 +123,7 @@ func setUpHiddenEntities(t *testing.T) string {
 func TestAccEntitiesDataSourceHidden(t *testing.T) {
 	areaID := setUpHiddenEntities(t)
 	// sensor.acc_hidden_temp exists only in the state machine, so it has no registry entry.
-	c := entitiesClient(t)
+	c := acctest.Client(t)
 	if err := c.REST.Do(context.Background(), http.MethodPost, "states/sensor.acc_hidden_temp", map[string]any{
 		"state": "1", "attributes": map[string]any{"friendly_name": "Acc Hidden Temp"},
 	}, nil); err != nil {

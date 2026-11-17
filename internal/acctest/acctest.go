@@ -13,7 +13,6 @@ package acctest
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"sync"
@@ -130,9 +129,7 @@ func Client(t *testing.T) *client.HAClient {
 		t.Fatal(err)
 	}
 	c := client.New(client.Config{URL: u, Token: ha.Token, Timeout: 30 * time.Second})
-	if ws, ok := c.WS.(io.Closer); ok {
-		t.Cleanup(func() { _ = ws.Close() })
-	}
+	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
 

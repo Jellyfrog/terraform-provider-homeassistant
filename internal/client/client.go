@@ -3,6 +3,7 @@ package client
 
 import (
 	"crypto/tls"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -40,6 +41,14 @@ func New(cfg Config) *HAClient {
 		REST: &RESTClient{cfg: cfg, http: httpClient},
 		WS:   newWSClient(cfg, httpClient),
 	}
+}
+
+// Close closes the WebSocket connection if one is open. A later command dials again.
+func (c *HAClient) Close() error {
+	if ws, ok := c.WS.(io.Closer); ok {
+		return ws.Close()
+	}
+	return nil
 }
 
 // RESTClient calls Home Assistant's `/api/*` endpoints.

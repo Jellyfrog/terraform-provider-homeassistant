@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -78,8 +79,8 @@ func groupOf(groupIDs []string) (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("the user is in the groups %q; the provider manages only users in exactly one of "+
-		"%q, %q and %q", groupIDs, client.GroupAdmin, client.GroupUser, client.GroupReadOnly)
+	return "", fmt.Errorf("the user is in the groups %q; the provider manages only users in exactly one of %q",
+		groupIDs, slices.Sorted(maps.Values(userGroups)))
 }
 
 func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -154,7 +155,7 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString("user"),
-				Validators:  []validator.String{stringvalidator.OneOf("admin", "user", "read-only")},
+				Validators:  []validator.String{stringvalidator.OneOf(slices.Sorted(maps.Keys(userGroups))...)},
 			},
 			"is_active": schema.BoolAttribute{
 				Description: "Whether the user can log in. Defaults to `true`.",

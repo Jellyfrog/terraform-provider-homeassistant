@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 	"testing"
 
@@ -23,10 +22,7 @@ type fakeLovelaceResources struct {
 }
 
 func (f *fakeLovelaceResources) Command(_ context.Context, typ string, params map[string]any, result any) error {
-	reply := func(v any) error {
-		b, _ := json.Marshal(v)
-		return json.Unmarshal(b, result)
-	}
+	reply := func(v any) error { return jsonReply(v, result) }
 	switch {
 	case typ == "lovelace/info":
 		return reply(map[string]string{"resource_mode": f.mode})

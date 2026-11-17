@@ -84,7 +84,7 @@ func TestPersonCreateWithIDSendsAllFieldsOnRename(t *testing.T) {
 	checkDiags(t, resp.Diagnostics, "")
 
 	want := client.Person{
-		ID: "jane_doe", Name: "Jane", UserID: ptr("u1"),
+		ID: "jane_doe", Name: "Jane", UserID: new("u1"),
 		DeviceTrackers: []string{"device_tracker.phone", "device_tracker.tablet"},
 	}
 	if len(f.storage) != 1 || !reflect.DeepEqual(f.storage[0], want) {
@@ -94,7 +94,7 @@ func TestPersonCreateWithIDSendsAllFieldsOnRename(t *testing.T) {
 
 func TestPersonReadAndUpdate(t *testing.T) {
 	f := &fakePersons{storage: []client.Person{{
-		ID: "jane", Name: "Jane", UserID: ptr("u1"),
+		ID: "jane", Name: "Jane", UserID: new("u1"),
 		DeviceTrackers: []string{"device_tracker.tablet", "device_tracker.phone"},
 	}}}
 	r := personRes(f)

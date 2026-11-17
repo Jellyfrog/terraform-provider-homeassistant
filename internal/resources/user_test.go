@@ -117,6 +117,14 @@ func (f *fakeUsers) Command(ctx context.Context, typ string, params map[string]a
 	return &client.WSError{Code: "unknown_command", Message: typ}
 }
 
+// The commands that change logins.
+const (
+	cmdCreateLogin    = "config/auth_provider/homeassistant/create"
+	cmdDeleteLogin    = "config/auth_provider/homeassistant/delete"
+	cmdChangeUsername = "config/auth_provider/homeassistant/admin_change_username"
+	cmdChangePassword = "config/auth_provider/homeassistant/admin_change_password"
+)
+
 func newFakeUsers(users ...client.User) *fakeUsers {
 	return &fakeUsers{users: users, passwords: map[string]string{}}
 }
@@ -133,6 +141,12 @@ func jane() userModel {
 	}
 }
 
+// withoutLogin returns m without a username and password.
+func withoutLogin(m userModel) userModel {
+	m.Username, m.Password = types.StringNull(), types.StringNull()
+	return m
+}
+
 // userRequest returns the plan and config of a configuration m: the config holds m, and the plan
 // holds m without the write-only password_wo, as OpenTofu plans it.
 func userRequest(t *testing.T, r *userResource, m userModel) (tfsdk.Plan, tfsdk.Config) {
@@ -142,12 +156,12 @@ func userRequest(t *testing.T, r *userResource, m userModel) (tfsdk.Plan, tfsdk.
 	return planOf(t, r, plan), tfsdk.Config(stateOf(t, r, m))
 }
 
-func createUser(t *testing.T, f *fakeUsers, m userModel) (userModel, resource.CreateResponse) {
+func createUser(ctx context.Context, t *testing.T, f *fakeUsers, m userModel) (userModel, resource.CreateResponse) {
 	t.Helper()
 	r := userRes(f)
 	resp := resource.CreateResponse{State: stateOf(t, r, userModel{})}
 	plan, config := userRequest(t, r, m)
-	r.Create(t.Context(), resource.CreateRequest{Plan: plan, Config: config}, &resp)
+	r.Create(ctx, resource.CreateRequest{Plan: plan, Config: config}, &resp)
 	var got userModel
 	if !resp.Diagnostics.HasError() {
 		resp.State.Get(t.Context(), &got)
@@ -182,7 +196,7 @@ func updateUser(t *testing.T, f *fakeUsers, old, m userModel) (userModel, resour
 
 func TestUserCreateAndRead(t *testing.T) {
 	f := newFakeUsers()
-	created, resp := createUser(t, f, jane())
+	created, resp := createUser(t.Context(), t, f, jane())
 	checkDiags(t, resp.Diagnostics, "")
 	if created.ID.ValueString() != "u1" || f.passwords["jane"] != "secret" {
 		t.Fatalf("created %+v, passwords %v", created, f.passwords)
@@ -210,8 +224,9 @@ func TestUserCreateAndRead(t *testing.T) {
 func TestUserCreateWithoutLogin(t *testing.T) {
 	f := newFakeUsers()
 	m := jane()
-	m.Username, m.Password, m.IsActive = types.StringNull(), types.StringNull(), types.BoolValue(true)
-	_, resp := createUser(t, f, m)
+	m = withoutLogin(m)
+	m.IsActive = types.BoolValue(true)
+	_, resp := createUser(t.Context(), t, f, m)
 	checkDiags(t, resp.Diagnostics, "")
 	if !slices.Equal(f.calls, []string{"config/auth/create"}) {
 		t.Errorf("calls = %v, want only the create", f.calls)
@@ -220,8 +235,8 @@ func TestUserCreateWithoutLogin(t *testing.T) {
 
 func TestUserCreateUndoneWhenLoginFails(t *testing.T) {
 	f := newFakeUsers()
-	f.fail = map[string]string{"config/auth_provider/homeassistant/create": "home_assistant_error"}
-	_, resp := createUser(t, f, jane())
+	f.fail = map[string]string{cmdCreateLogin: "home_assistant_error"}
+	_, resp := createUser(t.Context(), t, f, jane())
 	checkDiags(t, resp.Diagnostics, "deleted again")
 	if len(f.users) != 0 {
 		t.Errorf("users left behind: %+v", f.users)
@@ -259,10 +274,6 @@ func TestUserReadRejectsUnmanageable(t *testing.T) {
 
 func TestUserUpdateLogin(t *testing.T) {
 	same := func(m userModel) userModel { return m }
-	noLogin := func(m userModel) userModel {
-		m.Username, m.Password = types.StringNull(), types.StringNull()
-		return m
-	}
 	renamed := func(m userModel) userModel {
 		m.Username = types.StringValue("janet")
 		return m
@@ -279,14 +290,14 @@ func TestUserUpdateLogin(t *testing.T) {
 		wantCalls     []string // after config/auth/update
 		wantPasswords map[string]string
 	}{
-		{"add", noLogin, same, []string{check, "config/auth_provider/homeassistant/create"}, map[string]string{"jane": "secret"}},
-		{"remove", same, noLogin, []string{check, "config/auth_provider/homeassistant/delete"}, map[string]string{}},
-		{"rename", same, renamed, []string{"config/auth_provider/homeassistant/admin_change_username"}, map[string]string{"janet": "secret"}},
-		{"password", same, repassed, []string{"config/auth_provider/homeassistant/admin_change_password"}, map[string]string{"jane": "secret2"}},
+		{"add", withoutLogin, same, []string{check, cmdCreateLogin}, map[string]string{"jane": "secret"}},
+		{"remove", same, withoutLogin, []string{check, cmdDeleteLogin}, map[string]string{}},
+		{"rename", same, renamed, []string{cmdChangeUsername}, map[string]string{"janet": "secret"}},
+		{"password", same, repassed, []string{cmdChangePassword}, map[string]string{"jane": "secret2"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeUsers()
-			created, _ := createUser(t, f, tc.from(jane()))
+			created, _ := createUser(t.Context(), t, f, tc.from(jane()))
 			f.calls = nil
 			want := tc.to(jane())
 			want.ID = created.ID
@@ -307,8 +318,8 @@ func TestUserUpdateLogin(t *testing.T) {
 
 func TestUserUpdatePasswordNeedsOwner(t *testing.T) {
 	f := newFakeUsers()
-	created, _ := createUser(t, f, jane())
-	f.fail = map[string]string{"config/auth_provider/homeassistant/admin_change_password": "unauthorized"}
+	created, _ := createUser(t.Context(), t, f, jane())
+	f.fail = map[string]string{cmdChangePassword: "unauthorized"}
 	m := jane()
 	m.ID, m.Name, m.Password = created.ID, types.StringValue("Janet"), types.StringValue("secret2")
 	got, resp := updateUser(t, f, created, m)
@@ -321,8 +332,8 @@ func TestUserUpdatePasswordNeedsOwner(t *testing.T) {
 
 func TestUserImport(t *testing.T) {
 	f := newFakeUsers(
-		client.User{ID: "u1", IsOwner: true, Username: ptr("owner")},
-		client.User{ID: "u2", Username: ptr("jane")},
+		client.User{ID: "u1", IsOwner: true, Username: new("owner")},
+		client.User{ID: "u2", Username: new("jane")},
 		client.User{ID: "u3", SystemGenerated: true},
 	)
 	for _, tc := range []struct{ id, wantID, wantErr string }{
@@ -355,16 +366,16 @@ func TestUsernameValidator(t *testing.T) {
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
-
 func modifyUserPlan(t *testing.T, state *userModel, plan userModel) resource.ModifyPlanResponse {
 	t.Helper()
 	r := userRes(newFakeUsers())
 	p, config := userRequest(t, r, plan)
-	req := resource.ModifyPlanRequest{Plan: p, Config: config, State: stateOf(t, r, userModel{})}
-	req.State.Raw = tftypes.NewValue(req.State.Schema.Type().TerraformType(t.Context()), nil)
+	req := resource.ModifyPlanRequest{Plan: p, Config: config}
 	if state != nil {
 		req.State = stateOf(t, r, *state)
+	} else {
+		req.State = stateOf(t, r, userModel{})
+		req.State.Raw = tftypes.NewValue(req.State.Schema.Type().TerraformType(t.Context()), nil)
 	}
 	resp := resource.ModifyPlanResponse{Plan: req.Plan}
 	r.ModifyPlan(t.Context(), req, &resp)
@@ -376,8 +387,7 @@ func TestUserModifyPlan(t *testing.T) {
 	withLogin.ID = types.StringValue("u1")
 	noPassword := withLogin
 	noPassword.Password = types.StringNull()
-	noLogin := withLogin
-	noLogin.Username, noLogin.Password = types.StringNull(), types.StringNull()
+	noLogin := withoutLogin(withLogin)
 
 	// Creating a login needs a password, on a new user and on one without a login.
 	checkDiags(t, modifyUserPlan(t, nil, noPassword).Diagnostics, "needs a password")
@@ -394,13 +404,13 @@ func TestUserModifyPlan(t *testing.T) {
 
 func TestUserUpdateWithoutPasswordKeepsIt(t *testing.T) {
 	f := newFakeUsers()
-	created, _ := createUser(t, f, jane())
+	created, _ := createUser(t.Context(), t, f, jane())
 	f.calls = nil
 	m := created
 	m.Password = types.StringNull()
 	_, resp := updateUser(t, f, created, m)
 	checkDiags(t, resp.Diagnostics, "")
-	if slices.Contains(f.calls, "config/auth_provider/homeassistant/admin_change_password") || f.passwords["jane"] != "secret" {
+	if slices.Contains(f.calls, cmdChangePassword) || f.passwords["jane"] != "secret" {
 		t.Errorf("calls = %v, passwords = %v; want the password unchanged", f.calls, f.passwords)
 	}
 }
@@ -411,20 +421,19 @@ func TestUserApplyNeedsPasswordForNewLogin(t *testing.T) {
 	m := jane()
 	m.Password = types.StringNull()
 	f := newFakeUsers()
-	_, resp := createUser(t, f, m)
+	_, resp := createUser(t.Context(), t, f, m)
 	checkDiags(t, resp.Diagnostics, "needs a password")
 	if len(f.calls) != 0 {
 		t.Errorf("create: calls = %v, want none", f.calls)
 	}
 
-	noLogin := jane()
-	noLogin.Username, noLogin.Password = types.StringNull(), types.StringNull()
-	created, _ := createUser(t, f, noLogin)
+	noLogin := withoutLogin(jane())
+	created, _ := createUser(t.Context(), t, f, noLogin)
 	f.calls = nil
 	m.ID = created.ID
 	_, uresp := updateUser(t, f, created, m)
 	checkDiags(t, uresp.Diagnostics, "needs a password")
-	if slices.Contains(f.calls, "config/auth_provider/homeassistant/create") {
+	if slices.Contains(f.calls, cmdCreateLogin) {
 		t.Errorf("update: calls = %v, want no login created", f.calls)
 	}
 }
@@ -439,7 +448,7 @@ func withWO(m userModel, password string, version int64) userModel {
 
 func TestUserWriteOnlyPassword(t *testing.T) {
 	f := newFakeUsers()
-	created, resp := createUser(t, f, withWO(jane(), "wo-secret", 1))
+	created, resp := createUser(t.Context(), t, f, withWO(jane(), "wo-secret", 1))
 	checkDiags(t, resp.Diagnostics, "")
 	if f.passwords["jane"] != "wo-secret" {
 		t.Fatalf("passwords = %v, want the write-only one", f.passwords)
@@ -470,7 +479,7 @@ func TestUserWriteOnlyPassword(t *testing.T) {
 			tc.m.ID = created.ID
 			_, uresp := updateUser(t, f, created, tc.m)
 			checkDiags(t, uresp.Diagnostics, "")
-			called := slices.Contains(f.calls, "config/auth_provider/homeassistant/admin_change_password")
+			called := slices.Contains(f.calls, cmdChangePassword)
 			if called != tc.wantCall || f.passwords["jane"] != tc.wantPass {
 				t.Errorf("change_password called = %v, passwords = %v", called, f.passwords)
 			}
@@ -480,7 +489,7 @@ func TestUserWriteOnlyPassword(t *testing.T) {
 
 func TestUserSwitchToWriteOnlyPassword(t *testing.T) {
 	f := newFakeUsers()
-	created, _ := createUser(t, f, jane())
+	created, _ := createUser(t.Context(), t, f, jane())
 	m := withWO(jane(), "wo-secret", 1)
 	m.ID = created.ID
 	got, resp := updateUser(t, f, created, m)
@@ -495,16 +504,13 @@ func TestUserModifyPlanAcceptsWriteOnlyPassword(t *testing.T) {
 }
 
 func TestUserCreateUndoneWhenCancelled(t *testing.T) {
-	for _, step := range []string{"config/auth/update", "config/auth_provider/homeassistant/create"} {
+	for _, step := range []string{"config/auth/update", cmdCreateLogin} {
 		t.Run(step, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			f := newFakeUsers()
 			f.cancelOn, f.cancel = step, cancel
-			r := userRes(f)
-			plan, config := userRequest(t, r, jane()) // jane is inactive, so create also updates
-			resp := resource.CreateResponse{State: stateOf(t, r, userModel{})}
-			r.Create(ctx, resource.CreateRequest{Plan: plan, Config: config}, &resp)
+			_, resp := createUser(ctx, t, f, jane()) // jane is inactive, so create also updates
 			checkDiags(t, resp.Diagnostics, "deleted again")
 			if len(f.users) != 0 {
 				t.Errorf("users left behind after Ctrl-C: %+v", f.users)
@@ -514,32 +520,31 @@ func TestUserCreateUndoneWhenCancelled(t *testing.T) {
 }
 
 func TestUserUpdateRejectsLoginChangedOutside(t *testing.T) {
-	noLogin := jane()
-	noLogin.Username, noLogin.Password = types.StringNull(), types.StringNull()
+	noLogin := withoutLogin(jane())
 
 	t.Run("added", func(t *testing.T) {
 		// Planned without a login; one was added in Home Assistant since.
 		f := newFakeUsers()
-		created, _ := createUser(t, f, noLogin)
-		f.users[0].Username = ptr("jane-elsewhere")
+		created, _ := createUser(t.Context(), t, f, noLogin)
+		f.users[0].Username = new("jane-elsewhere")
 		m := jane()
 		m.ID = created.ID
 		_, resp := updateUser(t, f, created, m)
 		checkDiags(t, resp.Diagnostics, `is "jane-elsewhere" in Home Assistant, but the plan expected none`)
-		if slices.Contains(f.calls, "config/auth_provider/homeassistant/create") {
+		if slices.Contains(f.calls, cmdCreateLogin) {
 			t.Error("a second login was created")
 		}
 	})
 	t.Run("renamed", func(t *testing.T) {
 		// Planned to delete the login "jane", which was renamed and given to someone else since.
 		f := newFakeUsers()
-		created, _ := createUser(t, f, jane())
-		f.users[0].Username = ptr("janet")
+		created, _ := createUser(t.Context(), t, f, jane())
+		f.users[0].Username = new("janet")
 		m := noLogin
 		m.ID = created.ID
 		got, resp := updateUser(t, f, created, m)
 		checkDiags(t, resp.Diagnostics, `is "janet" in Home Assistant, but the plan expected "jane"`)
-		if slices.Contains(f.calls, "config/auth_provider/homeassistant/delete") {
+		if slices.Contains(f.calls, cmdDeleteLogin) {
 			t.Error("a login was deleted")
 		}
 		// The state keeps the login, so the next plan, after a refresh, sees the new one.

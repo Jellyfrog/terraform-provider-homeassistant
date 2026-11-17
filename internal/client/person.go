@@ -25,8 +25,8 @@ func NewPersons(ws WSCommander) Persons {
 	}}
 }
 
-// List returns the persons in storage and those defined in YAML.
-func (p Persons) List(ctx context.Context) (storage, yaml []Person, err error) {
+// list returns the persons in storage and those defined in YAML.
+func (p Persons) list(ctx context.Context) (storage, yaml []Person, err error) {
 	var res struct {
 		Storage []Person `json:"storage"`
 		Config  []Person `json:"config"`
@@ -38,7 +38,7 @@ func (p Persons) List(ctx context.Context) (storage, yaml []Person, err error) {
 // Get returns the person in storage with the given ID. ok is false if there is none; yaml is
 // true if a person with that ID is defined in YAML instead.
 func (p Persons) Get(ctx context.Context, id string) (person Person, ok, yaml bool, err error) {
-	storage, yamlPersons, err := p.List(ctx)
+	storage, yamlPersons, err := p.list(ctx)
 	if err != nil {
 		return person, false, false, err
 	}

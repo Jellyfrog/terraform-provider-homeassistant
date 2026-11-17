@@ -1,7 +1,6 @@
 package resources_test
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"testing"
@@ -19,9 +18,9 @@ func persons(t *testing.T) client.Persons {
 	return client.NewPersons(haClient(t).WS)
 }
 
-func person(t *testing.T, id string) (client.Person, bool) {
+func person(t *testing.T, ps client.Persons, id string) (client.Person, bool) {
 	t.Helper()
-	p, ok, _, err := persons(t).Get(context.Background(), id)
+	p, ok, _, err := ps.Get(t.Context(), id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,11 +28,16 @@ func person(t *testing.T, id string) (client.Person, bool) {
 }
 
 func personConfig(body string) string {
-	return acctest.ProviderConfig + fmt.Sprintf(`
+	return acctest.ProviderConfig + `
 resource "homeassistant_user" "jane" {
   name = "Acc Person User"
 }
+` + personOnlyConfig(body)
+}
 
+// personOnlyConfig is personConfig without the user, for tests that link none.
+func personOnlyConfig(body string) string {
+	return fmt.Sprintf(`
 resource "homeassistant_person" "test" {
 %s
 }
@@ -42,11 +46,12 @@ resource "homeassistant_person" "test" {
 
 func TestAccPerson(t *testing.T) {
 	const addr = "homeassistant_person.test"
+	ps := persons(t)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
 		CheckDestroy: func(*terraform.State) error {
-			if _, ok := person(t, "acc_person"); ok {
+			if _, ok := person(t, ps, "acc_person"); ok {
 				t.Error("person acc_person still exists")
 			}
 			return nil
@@ -80,7 +85,7 @@ func TestAccPerson(t *testing.T) {
 					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction(addr, plancheck.ResourceActionUpdate)},
 				},
 				Check: func(*terraform.State) error {
-					p, ok := person(t, "acc_person")
+					p, ok := person(t, ps, "acc_person")
 					want := client.Person{ID: "acc_person", Name: "Acc Person Renamed", DeviceTrackers: []string{"device_tracker.acc_phone"}}
 					if !ok || p.Name != want.Name || p.UserID != nil || p.Picture != nil || !slices.Equal(p.DeviceTrackers, want.DeviceTrackers) {
 						return fmt.Errorf("in Home Assistant: %+v, %v; want %+v", p, ok, want)
@@ -99,13 +104,14 @@ func TestAccPerson(t *testing.T) {
 
 func TestAccPerson_ExplicitID(t *testing.T) {
 	const addr = "homeassistant_person.test"
+	ps := persons(t)
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV6ProviderFactories: acctest.ProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				// Create-then-rename keeps the trackers, which an update without them would clear.
-				Config: personConfig(`
+				Config: acctest.ProviderConfig + personOnlyConfig(`
   id              = "acc_pinned_person"
   name            = "Pinned Person"
   device_trackers = ["device_tracker.acc_pinned"]
@@ -113,7 +119,7 @@ func TestAccPerson_ExplicitID(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(addr, "id", "acc_pinned_person"),
 					func(*terraform.State) error {
-						p, ok := person(t, "acc_pinned_person")
+						p, ok := person(t, ps, "acc_pinned_person")
 						if !ok || p.Name != "Pinned Person" || !slices.Equal(p.DeviceTrackers, []string{"device_tracker.acc_pinned"}) {
 							return fmt.Errorf("in Home Assistant: %+v, %v", p, ok)
 						}

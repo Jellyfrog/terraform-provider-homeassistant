@@ -3,12 +3,13 @@ package resources
 import (
 	"context"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -45,36 +46,37 @@ type personModel struct {
 	Picture        types.String `tfsdk:"picture"`
 }
 
-func newPersonModel(p client.Person) personModel {
-	trackers := make([]attr.Value, 0, len(p.DeviceTrackers))
-	for _, t := range p.DeviceTrackers {
-		trackers = append(trackers, types.StringValue(t))
-	}
+func newPersonModel(ctx context.Context, p client.Person) (personModel, diag.Diagnostics) {
+	trackers, diags := types.SetValueFrom(ctx, types.StringType, append([]string{}, p.DeviceTrackers...))
 	return personModel{
 		ID:             types.StringValue(p.ID),
 		Name:           types.StringValue(p.Name),
 		UserID:         types.StringPointerValue(p.UserID),
-		DeviceTrackers: types.SetValueMust(types.StringType, trackers),
+		DeviceTrackers: trackers,
 		Picture:        types.StringPointerValue(p.Picture),
-	}
+	}, diags
 }
 
-// fields are every settable field of the person, with the given name. person/update resets the
+// fields are every settable field of the person other than its name. person/update resets the
 // device trackers when they are left out, so creates and updates always build their fields here.
 // Unset fields are null, which clears them; device trackers are sorted, so the call does not
 // depend on the set's order.
-func (m personModel) fields(name string) map[string]any {
-	trackers := make([]string, 0, len(m.DeviceTrackers.Elements()))
-	for _, t := range m.DeviceTrackers.Elements() {
-		trackers = append(trackers, t.(types.String).ValueString())
-	}
+func (m personModel) fields(ctx context.Context) (map[string]any, diag.Diagnostics) {
+	trackers := []string{}
+	diags := m.DeviceTrackers.ElementsAs(ctx, &trackers, false)
 	slices.Sort(trackers)
 	return map[string]any{
-		"name":            name,
 		"user_id":         m.UserID.ValueStringPointer(),
 		"device_trackers": trackers,
 		"picture":         m.Picture.ValueStringPointer(),
-	}
+	}, diags
+}
+
+// named returns fields with the given name added, leaving fields as they are.
+func named(fields map[string]any, name string) map[string]any {
+	f := maps.Clone(fields)
+	f["name"] = name
+	return f
 }
 
 func (r *personResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -144,16 +146,20 @@ func (r *personResource) Create(ctx context.Context, req resource.CreateRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	fields, diags := plan.fields(ctx)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
 
 	g := generatedID{
 		kind:     "person",
 		typeName: "homeassistant_person",
 		create: func(ctx context.Context, name string) (string, error) {
-			p, err := r.persons.Create(ctx, withoutNulls(plan.fields(name)))
+			p, err := r.persons.Create(ctx, withoutNulls(named(fields, name)))
 			return p.ID, err
 		},
 		rename: func(ctx context.Context, id, name string) error {
-			_, err := r.persons.Update(ctx, id, plan.fields(name))
+			_, err := r.persons.Update(ctx, id, named(fields, name))
 			return err
 		},
 		delete: r.persons.Delete,
@@ -190,7 +196,11 @@ func (r *personResource) Read(ctx context.Context, req resource.ReadRequest, res
 		resp.State.RemoveResource(ctx)
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, newPersonModel(p))...)
+	model, diags := newPersonModel(ctx, p)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
 }
 
 func (r *personResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -200,7 +210,11 @@ func (r *personResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	if _, err := r.persons.Update(ctx, plan.ID.ValueString(), plan.fields(plan.Name.ValueString())); err != nil {
+	fields, diags := plan.fields(ctx)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+	if _, err := r.persons.Update(ctx, plan.ID.ValueString(), named(fields, plan.Name.ValueString())); err != nil {
 		resp.Diagnostics.AddError("Updating person", client.ErrorDetail(err))
 		return
 	}
